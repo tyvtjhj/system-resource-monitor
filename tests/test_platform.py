@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 import pytest
@@ -120,3 +121,22 @@ def test_windows_partition_parent_returns_none():
 
 def test_is_elevated_returns_bool():
     assert isinstance(platform_info.is_elevated(), bool)
+
+
+def test_windows_cim_physical_disk_fallback(monkeypatch):
+    if os.name != "nt":
+        pytest.skip("Windows only")
+    from types import SimpleNamespace
+    from hardware_monitor.platform import windows
+
+    payload = '[{"Model":"Test Disk","InterfaceType":"SCSI","Size":1073741824,"SerialNumber":"SN123"}]'
+    monkeypatch.setattr(windows.subprocess, "run",
+                        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=payload, stderr=""))
+    disks = windows._physical_disks_via_cim()
+    assert disks == [{
+        "model": "Test Disk",
+        "interface_type": "SCSI",
+        "size_gb": 1.0,
+        "serial_number": "SN123",
+        "type": "physical",
+    }]

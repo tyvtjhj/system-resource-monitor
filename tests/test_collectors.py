@@ -135,6 +135,26 @@ def test_collect_disk_skips_inaccessible_partitions(monkeypatch):
     assert common.collect_disk([]) == []
 
 
+def test_collect_disk_filters_invalid_physical_and_partitions(monkeypatch):
+    valid = SimpleNamespace(device="C:", mountpoint="C:\\", fstype="NTFS")
+    empty = SimpleNamespace(device="", mountpoint="", fstype="")
+    duplicate = SimpleNamespace(device="C:", mountpoint="C:\\", fstype="NTFS")
+    usage = SimpleNamespace(
+        total=100 * 1024 ** 3, used=50 * 1024 ** 3, free=50 * 1024 ** 3, percent=50.0
+    )
+    monkeypatch.setattr(common.psutil, "disk_partitions", lambda all=True: [valid, empty, duplicate])
+    monkeypatch.setattr(common.psutil, "disk_usage", lambda mountpoint: usage)
+
+    physical = [None, {}, {"model": "Test SSD", "type": "physical"}]
+    rows = common.collect_disk(physical)
+
+    assert [row.get("model") for row in rows if row.get("type") == "physical"] == ["Test SSD"]
+    partitions = [row for row in rows if row.get("type") != "physical"]
+    assert len(partitions) == 1  # 空分区/重复分区都被过滤
+    assert partitions[0]["device"] == "C:"
+    assert partitions[0]["mountpoint"] == "C:\\"
+
+
 def test_psutil_network_adapters(monkeypatch):
     def fake_addrs():
         return {

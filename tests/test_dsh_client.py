@@ -28,6 +28,8 @@ def test_dsh_client_registers_sidebar_entry_and_panel():
     payload = json.loads(result.stdout)
     assert payload["id"] == "dsh-hardware-monitor"
     assert payload["panelRender"] == "ok", payload
+    assert payload["panelHasPhysicalModel"] is True, payload
+    assert payload["panelTextHasUndefined"] is False, payload
 
     registrations = payload["registrations"]
     names = [(item["name"], item.get("id") or item.get("key")) for item in registrations]

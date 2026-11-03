@@ -276,6 +276,8 @@ window.__ModuleLoader__.load({
       const network = data.network_speed || {};
       const system = data.system_info || {};
       const disks = Array.isArray(data.disk) ? data.disk : [];
+      const physicalDisks = disks.filter((disk) => disk && disk.type === 'physical');
+      const partitions = disks.filter((disk) => disk && disk.type !== 'physical');
       const processList = state.processes && Array.isArray(state.processes.processes) ? state.processes.processes : [];
       const cores = Array.isArray(cpu.per_core) ? cpu.per_core : [];
 
@@ -401,16 +403,31 @@ window.__ModuleLoader__.load({
 
         h('div', { style: sectionStyle },
           h('div', { style: rowStyle },
-            h('strong', {}, '磁盘'),
-            h('span', { style: labelStyle }, `${disks.length} 个分区`)),
-          disks.length === 0
-            ? h('div', { style: { ...labelStyle, marginTop: '6px' } }, '无磁盘数据')
-            : disks.map((disk) => h('div', { key: disk.device || disk.mountpoint, style: { marginTop: '8px' } },
+            h('strong', {}, '物理硬盘'),
+            h('span', { style: labelStyle }, `${physicalDisks.length} 块`)),
+          physicalDisks.length === 0
+            ? h('div', { style: { ...labelStyle, marginTop: '6px' } },
+                '未识别到物理硬盘（WMI/CIM 不可用或需要管理员权限时可能如此）')
+            : physicalDisks.map((disk, index) => h('div', { key: `physical-${index}`, style: { marginTop: '8px' } },
                 h('div', { style: rowStyle },
-                  h('span', { style: { fontSize: '12px' } }, `${disk.device || disk.mountpoint}${disk.fstype ? ` · ${disk.fstype}` : ''}`),
+                  h('span', { style: { fontSize: '12px' } }, disk.model || `Disk ${index + 1}`),
                   h('span', { style: { ...labelStyle, fontVariantNumeric: 'tabular-nums' } },
-                    `${fmt(disk.free_gb, 1)} GB 可用 / ${fmt(disk.total_gb, 1)} GB · ${fmt(disk.usage_percent)}%`)),
-                h('div', { style: barBg }, h('div', { style: barFill(num(disk.usage_percent) || 0) }))))),
+                    `${num(disk.size_gb) === null ? '--' : `${fmt(disk.size_gb, 1)} GB`}${disk.interface_type ? ` · ${disk.interface_type}` : ''}`)))),
+          h('div', { style: { ...rowStyle, marginTop: '12px' } },
+            h('strong', {}, '磁盘分区'),
+            h('span', { style: labelStyle }, `${partitions.length} 个`)),
+          partitions.length === 0
+            ? h('div', { style: { ...labelStyle, marginTop: '6px' } }, '无分区数据')
+            : partitions.map((disk, index) => {
+                const name = disk.device || disk.mountpoint || disk.mount_point || `分区 ${index + 1}`;
+                const usage = num(disk.usage_percent);
+                return h('div', { key: `partition-${index}`, style: { marginTop: '8px' } },
+                  h('div', { style: rowStyle },
+                    h('span', { style: { fontSize: '12px' } }, `${name}${disk.fstype ? ` · ${disk.fstype}` : ''}`),
+                    h('span', { style: { ...labelStyle, fontVariantNumeric: 'tabular-nums' } },
+                      `${fmt(disk.free_gb, 1)} GB 可用 / ${fmt(disk.total_gb, 1)} GB · ${fmt(usage)}%`)),
+                  h('div', { style: barBg }, h('div', { style: barFill(usage || 0) })));
+              })),
 
         h('div', { style: sectionStyle },
           h('div', { style: rowStyle },

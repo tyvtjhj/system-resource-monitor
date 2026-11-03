@@ -108,30 +108,93 @@ def wmi_client():
 _disk_wmi_warned = False
 
 
-def physical_disks():
-    """WMI Win32_DiskDrive：型号 / 接口 / 容量 / 序列号（不含分区）。"""
-    global _disk_wmi_warned
-    disks = []
-    client = wmi_client()
-    if client is None:
-        return disks
+_disk_cache = []
+_disk_cache_at = 0.0
+_DISK_CACHE_TTL = 60.0
 
+
+def _physical_disks_via_cim():
+    """WMI COM 不可用时的兜底：用隐藏窗口的 PowerShell CIM 查询。
+
+    某些环境下 python `wmi` 依赖的 gen_py 临时文件不可写，或 WMI 服务不可用，
+    但 `Get-CimInstance Win32_DiskDrive` 仍可工作；这条路径不会弹出控制台窗口。
+    """
+    command = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "[Console]::OutputEncoding=[Text.Encoding]::UTF8; "
+        "Get-CimInstance Win32_DiskDrive | "
+        "Select-Object Model,InterfaceType,Size,SerialNumber | ConvertTo-Json -Compress",
+    ]
     try:
-        for index, disk in enumerate(client.Win32_DiskDrive()):
-            model = str(getattr(disk, "Model", "") or "").strip()
-            size_gb = round(float(getattr(disk, "Size", 0) or 0) / (1024 ** 3), 1)
+        proc = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=12,
+            **subprocess_flags(),
+        )
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return []
+        payload = json.loads(proc.stdout)
+        if isinstance(payload, dict):
+            payload = [payload]
+        disks = []
+        for index, row in enumerate(payload):
+            if not isinstance(row, dict):
+                continue
+            model = str(row.get("Model") or "").strip()
+            size_gb = round(float(row.get("Size") or 0) / (1024 ** 3), 1)
             disks.append({
                 "model": model or f"Disk {index}",
-                "interface_type": str(getattr(disk, "InterfaceType", "")),
+                "interface_type": str(row.get("InterfaceType") or ""),
                 "size_gb": size_gb if size_gb > 0 else None,
-                "serial_number": str(getattr(disk, "SerialNumber", "")).strip(),
+                "serial_number": str(row.get("SerialNumber") or "").strip(),
                 "type": "physical",
             })
+        return disks
     except Exception as exc:  # noqa: BLE001
-        if not _disk_wmi_warned:
-            _disk_wmi_warned = True
-            print(f"[WARN] WMI physical disk query failed (只会提示一次): {exc}")
-    return disks
+        print(f"[WARN] CIM physical disk fallback failed: {exc}")
+        return []
+
+
+def physical_disks():
+    """WMI Win32_DiskDrive：型号 / 接口 / 容量 / 序列号（不含分区）。
+
+    结果缓存 60 秒；WMI 查询失败或返回空时改用 PowerShell CIM 兜底，
+    避免「其他机器上物理盘识别不到」。
+    """
+    global _disk_wmi_warned, _disk_cache, _disk_cache_at
+    now = time.time()
+    if now - _disk_cache_at < _DISK_CACHE_TTL:
+        return [dict(item) for item in _disk_cache]
+
+    disks = []
+    client = wmi_client()
+    if client is not None:
+        try:
+            for index, disk in enumerate(client.Win32_DiskDrive()):
+                model = str(getattr(disk, "Model", "") or "").strip()
+                size_gb = round(float(getattr(disk, "Size", 0) or 0) / (1024 ** 3), 1)
+                disks.append({
+                    "model": model or f"Disk {index}",
+                    "interface_type": str(getattr(disk, "InterfaceType", "") or ""),
+                    "size_gb": size_gb if size_gb > 0 else None,
+                    "serial_number": str(getattr(disk, "SerialNumber", "") or "").strip(),
+                    "type": "physical",
+                })
+        except Exception as exc:  # noqa: BLE001
+            if not _disk_wmi_warned:
+                _disk_wmi_warned = True
+                print(f"[WARN] WMI physical disk query failed (只会提示一次): {exc}")
+
+    if not disks:
+        disks = _physical_disks_via_cim()
+
+    _disk_cache = disks
+    _disk_cache_at = now
+    return [dict(item) for item in disks]
 
 
 def partition_parent(device):

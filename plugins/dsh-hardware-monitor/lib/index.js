@@ -17,7 +17,7 @@
  *
  * 无外部依赖，仅用 Node 内置模块。
  */
-import { appendFileSync, existsSync, openSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, openSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -149,6 +149,16 @@ async function ensureService(reason = 'startup') {
     let logFd = 'ignore'
     try { logFd = openSync(logPath, 'a') } catch { /* 日志不可写则丢弃 */ }
 
+    // DSH 进程的 TEMP 可能受限；WMI 的 gen_py 缓存需要可写临时目录，
+    // 否则物理盘查询会失败。给子进程换成仓库内 .tmp（失败再退回插件目录）。
+    let tempDir = join(repo, '.tmp')
+    try {
+      mkdirSync(tempDir, { recursive: true })
+    } catch {
+      tempDir = join(PLUGIN_DIR, '.tmp')
+      try { mkdirSync(tempDir, { recursive: true }) } catch { tempDir = process.env.TEMP || '' }
+    }
+
     const child = spawn(python, ['-m', 'hardware_monitor', '--no-elevate'], {
       cwd: repo,
       detached: true,
@@ -156,6 +166,7 @@ async function ensureService(reason = 'startup') {
       stdio: ['ignore', logFd, logFd],
       env: {
         ...process.env,
+        ...(tempDir ? { TEMP: tempDir, TMP: tempDir } : {}),
         MONITOR_NO_ELEVATE: '1',
         ...(TOKEN ? { MONITOR_TOKEN: TOKEN } : {}),
       },

@@ -820,14 +820,15 @@
 
       // Disk info - total capacity and usage from all partitions
       if (data.disk && data.disk.length > 0) {
-        const partitions = data.disk.filter(d => !d.type);
+        const diskRows = Array.isArray(data.disk) ? data.disk.filter(d => d && typeof d === 'object') : [];
+        const partitions = diskRows.filter(d => !d.type);
 
         let diskInfoHtml = '';
 
         if (partitions.length > 0) {
           // Total used and total size across all partitions
-          const totalUsed = partitions.reduce((s, p) => s + p.used_gb, 0);
-          const totalSize = partitions.reduce((s, p) => s + p.total_gb, 0);
+          const totalUsed = partitions.reduce((s, p) => s + (Number(p.used_gb) || 0), 0);
+          const totalSize = partitions.reduce((s, p) => s + (Number(p.total_gb) || 0), 0);
           const totalPercent = totalSize > 0 ? (totalUsed / totalSize * 100) : 0;
 
           setGauge(diskG, totalPercent);
@@ -1234,7 +1235,8 @@
 
     function renderSidebar(data) {
       const physicalDisks = data.disk.filter(d => d.type === 'physical');
-      const partitions = data.disk.filter(d => !d.type);
+      const diskRows = Array.isArray(data.disk) ? data.disk.filter(d => d && typeof d === 'object') : [];
+        const partitions = diskRows.filter(d => !d.type);
 
       // Physical disks list
       const pdContainer = document.getElementById('physicalDiskList');
@@ -1242,7 +1244,7 @@
         pdContainer.innerHTML = physicalDisks.map(d => `
           <div class="disk-card">
             <span class="disk-name" title="${d.model || 'Unknown'}">${(d.model || 'Unknown').substring(0, 35)}</span>
-            <span class="disk-size">${d.size_gb != null ? d.size_gb + ' GB' : '--'} · ${d.interface_type}</span>
+            <span class="disk-size">${d.size_gb != null ? d.size_gb + ' GB' : '--'} · ${d.interface_type || '--'}</span>
           </div>
         `).join('');
       } else {
@@ -1254,13 +1256,13 @@
       if (partitions.length > 0) {
         pContainer.innerHTML = partitions.map(d => `
           <div class="disk-card" style="flex-direction: column; align-items: stretch;">
-            <span class="disk-name">${d.device || d.mount_point}</span>
+            <span class="disk-name">${d.device || d.mountpoint || d.mount_point || '未知分区'}</span>
             <div class="disk-bar-container">
               <div class="disk-bar-bg">
                 <div class="disk-bar-fill" style="width: ${Math.min(d.usage_percent, 100)}%; background: ${d.usage_percent > 80 ? '#ef4444' : d.usage_percent > 60 ? '#f59e0b' : '#10b981'}"></div>
               </div>
             </div>
-            <span class="disk-size">${d.used_gb.toFixed(1)} GB / ${d.total_gb} GB · ${Math.round(d.usage_percent)}%</span>
+            <span class="disk-size">${(Number(d.used_gb) || 0).toFixed(1)} GB / ${Number(d.total_gb) || 0} GB · ${Math.round(Number(d.usage_percent) || 0)}%</span>
           </div>
         `).join('');
       } else {

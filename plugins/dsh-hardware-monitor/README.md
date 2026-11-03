@@ -95,6 +95,14 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 `targetSelector` 由使用方按宿主实际 DOM 填写；找不到时回退视口左上角。
 外部 https 宿主需在服务端 `MONITOR_FRAME_ANCESTORS` 中显式允许其来源。
 
+## 磁盘识别说明
+
+- 物理盘优先用 WMI `Win32_DiskDrive`；WMI 不可用（受限 TEMP、WMI 服务异常等）时自动回退到隐藏窗口的
+  PowerShell `Get-CimInstance Win32_DiskDrive`；
+- 分区来自 psutil，空盘符/无介质/无权限/重复分区会被过滤，字段统一为字符串；
+- DSH 面板把「物理硬盘」和「磁盘分区」分开渲染，不会再出现 `undefined` 空条目；
+- 若仍显示「未识别到物理硬盘」，可用 `run.bat` 以管理员启动一次（部分机器的 WMI/CIM 查询需要提权）。
+
 ## 限制
 
 - DSH 原生插件的 slot 依赖 DSH 版本（`conversation.session.header.corner`，回退 `conversation.composer.dock`）；

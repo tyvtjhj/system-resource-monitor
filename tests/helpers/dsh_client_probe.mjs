@@ -61,7 +61,10 @@ const panelState = {
     temperature: { cpu: { value: 47.5, source: 'acpi' }, gpu: { value: 40 } },
     network_speed: { download_mbps: 1.5, upload_mbps: 0.2 },
     system_info: { uptime: '01:00' },
-    disk: [{ device: 'C:/', fstype: 'NTFS', free_gb: 10, total_gb: 100, usage_percent: 90 }],
+    disk: [
+      { model: 'Fake SSD', interface_type: 'SCSI', size_gb: 500, serial_number: 'SN', type: 'physical' },
+      { device: 'C:/', mountpoint: 'C:/', fstype: 'NTFS', free_gb: 10, total_gb: 100, usage_percent: 90 },
+    ],
     latency_ms: 2.5,
     platform: { os: 'windows' },
   },
@@ -72,15 +75,26 @@ const panelState = {
 };
 
 let panelRender = 'skipped';
+let panelHasPhysicalModel = false;
+let panelTextHasUndefined = false;
 try {
   hookQueue.push(panelState);
   hookQueue.push(0);
   if (typeof panelComponent === 'function') {
-    panelComponent();
+    const tree = panelComponent();
     panelRender = 'ok';
+    const treeText = JSON.stringify(tree);
+    panelHasPhysicalModel = treeText.includes('Fake SSD');
+    panelTextHasUndefined = treeText.includes('undefined');
   }
 } catch (error) {
   panelRender = 'error: ' + String(error && error.message ? error.message : error);
 }
 
-console.log(JSON.stringify({ id: definition.id, registrations, panelRender }));
+console.log(JSON.stringify({
+  id: definition.id,
+  registrations,
+  panelRender,
+  panelHasPhysicalModel,
+  panelTextHasUndefined,
+}));

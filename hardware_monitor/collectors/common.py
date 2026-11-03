@@ -155,18 +155,40 @@ def collect_disk(physical=None, partition_parent=None):
     返回非空时给分区条目附加 `parent_device`，前端可据此把分区与整盘关联。
     Windows 没有可靠的映射，传 None 时不附加该字段（保持原有响应结构）。
     """
-    disks = list(physical or [])
+    disks = []
+    seen_partitions = set()
+
+    # 物理盘：只接受 dict，避免平台层返回 None/异常值时前端渲染出 undefined 行。
+    for item in physical or []:
+        if not isinstance(item, dict):
+            continue
+        entry = dict(item)
+        # 空对象/没有任何可识别字段的物理盘条目直接丢弃（避免前端出现空行）。
+        if not any(entry.get(key) for key in ("model", "device", "mountpoint", "name", "serial_number")):
+            continue
+        entry["type"] = "physical"
+        disks.append(entry)
 
     for part in psutil.disk_partitions(all=True):
+        device = str(getattr(part, "device", "") or "").strip()
+        mountpoint = str(getattr(part, "mountpoint", "") or "").strip()
+        # 没有盘符/挂载点的分区（部分虚拟盘、未挂载卷）直接跳过，避免空条目。
+        if not device and not mountpoint:
+            continue
+        key = (device, mountpoint)
+        if key in seen_partitions:
+            continue
         try:
-            usage = psutil.disk_usage(part.mountpoint)
+            usage = psutil.disk_usage(mountpoint or device)
         except (PermissionError, OSError):
             # 空光驱 / 无介质 / 无权限的分区直接跳过
             continue
+        seen_partitions.add(key)
         entry = {
-            "device": part.device,
-            "mountpoint": part.mountpoint,
-            "fstype": part.fstype,
+            # device 与 mountpoint 始终是字符串；极端环境下两者取其一兜底。
+            "device": device or mountpoint,
+            "mountpoint": mountpoint or device,
+            "fstype": str(getattr(part, "fstype", "") or ""),
             "total_gb": round(usage.total / (1024 ** 3), 1),
             "used_gb": round(usage.used / (1024 ** 3), 1),
             "free_gb": round(usage.free / (1024 ** 3), 1),
@@ -174,7 +196,7 @@ def collect_disk(physical=None, partition_parent=None):
         }
         if partition_parent is not None:
             try:
-                parent = partition_parent(part.device)
+                parent = partition_parent(device or mountpoint)
             except Exception:  # noqa: BLE001 - 映射失败不应影响磁盘数据
                 parent = None
             if parent:
