@@ -3,7 +3,7 @@
  *
  * 用法：node tests/helpers/dsh_host_probe.mjs <base_url>
  *
- * 用假的 ctx（webServer/tools）加载 plugin/adapters/dsh/lib/index.js，
+ * 用假的 ctx（webServer/tools）加载 plugins/dsh-hardware-monitor/lib/index.js，
  * 执行工具与两个路由，把结果以 JSON 打到 stdout；不依赖真实 DSH。
  */
 const baseUrl = process.argv[2];
@@ -16,7 +16,7 @@ process.env.HARDWARE_MONITOR_URL = baseUrl;
 process.env.HARDWARE_MONITOR_AUTOSTART = '0';  // 测试不拉起真实服务
 process.env.HARDWARE_MONITOR_TOKEN = process.env.HARDWARE_MONITOR_TOKEN || '';
 
-const moduleUrl = new URL('../../plugin/adapters/dsh/lib/index.js', import.meta.url);
+const moduleUrl = new URL('../../plugins/dsh-hardware-monitor/lib/index.js', import.meta.url);
 const { apply } = await import(moduleUrl.href);
 
 let handler = null;

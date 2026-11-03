@@ -12,7 +12,7 @@ globalThis.window = {
   },
 };
 
-await import(new URL('../../plugin/adapters/dsh/client.js', import.meta.url).href);
+await import(new URL('../../plugins/dsh-hardware-monitor/client.js', import.meta.url).href);
 
 const definition = globalThis.__dshPluginDefinition;
 if (!definition || typeof definition.factory !== 'function') {

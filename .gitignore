@@ -25,8 +25,12 @@ Thumbs.db
 requirements*.txt.tmp*
 
 # DSH 插件加载日志（运行时生成）
+# 旧路径残留（迁移期；service.log 被 DSH 宿主句柄占用，重启 DSH 后可删）
 plugin/adapters/dsh/apply.log
+plugin/adapters/dsh/service.log
+
+plugins/dsh-hardware-monitor/apply.log
 
 # 本地验证临时目录（服务日志、无头浏览器 profile 等）
 .tmp/
-plugin/adapters/dsh/service.log
+plugins/dsh-hardware-monitor/service.log

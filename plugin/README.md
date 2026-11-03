@@ -25,12 +25,14 @@ plugin/
 ├── README.md                                               # 本文件
 └── adapters/
     ├── web/README.md                 # DSH / DeepSeek / Codex Web 通用接入
-    ├── dsh/                          # DSH 原生插件（package.json/client.js/lib/install.ps1）
-    │   ├── adapter.config.json       # 仅 Web 注入回退使用
-    │   └── inject.js                 # 仅 Web 注入回退使用
     ├── userscript/hardware-monitor.user.js
     ├── codex/statusline.py
     └── vscode/                       # VS Code / Trae / Cursor 扩展骨架
+
+plugins/
+└── dsh-hardware-monitor/             # DSH 原生插件包（package.json/client.js/lib/install.ps1；awesome 投稿入口）
+    ├── adapter.config.json           # 仅 Web 注入回退使用
+    └── inject.js                     # 仅 Web 注入回退使用
 ```
 
 ## 通用接入（embed.js）
@@ -53,12 +55,12 @@ plugin/
 
 适配器源文件通过服务直接提供，便于 DSH 等宿主按 URL 注入：
 
-- `GET /plugin/adapters/dsh/inject.js`（同目录 `adapter.config.json` 可相对 fetch）
-- `GET /plugin/adapters/dsh/adapter.config.json`
+- `GET /plugins/dsh-hardware-monitor/inject.js`（同目录 `adapter.config.json` 可相对 fetch）
+- `GET /plugins/dsh-hardware-monitor/adapter.config.json`
 - `GET /plugin/adapters/userscript/hardware-monitor.user.js`
 - `GET /plugin/adapters/vscode/...`（含 README、源码；`node_modules`/`out` 不提供）
 
-示例：在 DSH 页面注入 `http://127.0.0.1:5678/plugin/adapters/dsh/inject.js` 即可；
+示例：在 DSH 页面注入 `http://127.0.0.1:5678/plugins/dsh-hardware-monitor/inject.js` 即可；
 配置默认取同目录 `adapter.config.json`，也可在注入前设置 `window.DSH_HARDWARE_MONITOR_CONFIG`
 或 `window.DSH_HARDWARE_MONITOR_CONFIG_URL` 覆盖。
 

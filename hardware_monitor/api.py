@@ -156,6 +156,22 @@ def create_app():
             resp.headers["Content-Type"] = "application/json; charset=utf-8"
         return resp
 
+    @app.route("/plugins/<path:filename>")
+    def plugin_package_asset(filename):
+        """插件包源文件（plugins/ 下的 DSH 子包：package.json/client.js/lib 等）。
+
+        与 /plugin/adapters 一样使用 safe_join，拒绝路径穿越。
+        """
+        directory = os.path.join(config.BASE_DIR, "plugins")
+        resp = send_from_directory(directory, filename)
+        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        if filename.endswith(".js"):
+            resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        elif filename.endswith(".json"):
+            resp.headers["Content-Type"] = "application/json; charset=utf-8"
+        return resp
+
     # ---------------- 全量 / 单指标 ----------------
     @app.route("/api/all")
     def api_all():

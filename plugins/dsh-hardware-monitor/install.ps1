@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     与 dsh-netwatch 相同的 bundle 安装方式：
-      1. 在 ~/.dsh/plugins 下建立指向本仓库 plugin/adapters/dsh 的 junction；
+      1. 在 ~/.dsh/plugins 下建立指向本仓库 plugins/dsh-hardware-monitor 的 junction；
       2. 在 profile 的 node_modules 下建立同名 junction；
       3. profile package.json 增加依赖（link:）并加入 dsh.profile.bundles；
       4. 清理旧版手工插入的 cordis.patch.yml 标记块（bundle patch 负责插入）；
@@ -16,7 +16,7 @@
     DSH profile 名，默认 desktop。
 
 .PARAMETER Repo
-    本仓库根目录，默认从本脚本位置向上推三层。
+    本仓库根目录，默认从本脚本位置向上推两层。
 #>
 [CmdletBinding()]
 param(
@@ -25,10 +25,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path }
+if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
 $dshHome = Join-Path $env:USERPROFILE ".dsh"
 $profileDir = Join-Path $dshHome "profiles\$Profile"
-$pluginSrc = Join-Path $Repo "plugin\adapters\dsh"
+$pluginSrc = Join-Path $Repo "plugins\dsh-hardware-monitor"
 $pkgName = "dsh-hardware-monitor"
 $linkTarget = Join-Path $dshHome "plugins\$pkgName"
 $linkPath = Join-Path $profileDir "node_modules\$pkgName"
@@ -118,4 +118,4 @@ Write-Host "  • 工具：hardware_monitor_status（模型可直接查询）"
 Write-Host "  • 服务地址：默认 http://127.0.0.1:5678；启动 DSH 前可设置："
 Write-Host "      `$env:HARDWARE_MONITOR_URL='http://127.0.0.1:5678'"
 Write-Host "      `$env:HARDWARE_MONITOR_TOKEN='<MONITOR_TOKEN>'"
-Write-Host "  • 卸载：powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\uninstall.ps1"
+Write-Host "  • 卸载：powershell -ExecutionPolicy Bypass -File .\plugins\dsh-hardware-monitor\uninstall.ps1"

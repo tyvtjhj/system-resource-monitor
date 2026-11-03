@@ -12,7 +12,7 @@ DSH 是 Electron/Web 宿主，支持 **client plugin + host plugin**。本目录
 ### 文件
 
 ```text
-plugin/adapters/dsh/
+plugins/dsh-hardware-monitor/
 ├── package.json           # DSH 插件清单（dsh.client / dsh.bundle）
 ├── client.js              # 浏览器半：对话区右上角挂件（React，slot 注入）
 ├── lib/index.js           # 宿主半：/hardware-monitor-api 代理 + hardware_monitor_status 工具
@@ -27,7 +27,7 @@ plugin/adapters/dsh/
 ### 安装
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\install.ps1
+powershell -ExecutionPolicy Bypass -File .\plugins\dsh-hardware-monitor\install.ps1
 ```
 
 脚本会：在 `~/.dsh/plugins` 与 profile `node_modules` 建立 junction → 把插件加入 profile
@@ -48,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\install.ps1
 
 > **重启后自动恢复**：DSH 启动或插件重载时，宿主半会检测 `/api/start`；若 5678 未运行，
 > 会用仓库 `.venv\Scripts\python.exe -m hardware_monitor --no-elevate` 后台拉起（避免 UAC），
-> 并每 30 秒看门狗重试；日志见 `plugin/adapters/dsh/service.log`。
+> 并每 30 秒看门狗重试；日志见 `plugins/dsh-hardware-monitor/service.log`。
 
 挂件点击展开明细；「打开完整面板」会打开 `http://127.0.0.1:5678/`。
 若启用 token，可在 DSH 页面控制台执行下面命令，让面板链接自动带 token（仅存本机 localStorage）：
@@ -74,21 +74,21 @@ localStorage.setItem('hardware-monitor-token', '你的口令')
 ### 卸载
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\uninstall.ps1
+powershell -ExecutionPolicy Bypass -File .\plugins\dsh-hardware-monitor\uninstall.ps1
 ```
 
 ## B. Web 注入回退（无插件管理器时）
 
 适配器源文件由服务提供：
 
-- `http://127.0.0.1:5678/plugin/adapters/dsh/inject.js`
-- `http://127.0.0.1:5678/plugin/adapters/dsh/adapter.config.json`
+- `http://127.0.0.1:5678/plugins/dsh-hardware-monitor/inject.js`
+- `http://127.0.0.1:5678/plugins/dsh-hardware-monitor/adapter.config.json`
 
 在可注入脚本的宿主页面注入 `inject.js`，配置默认取同目录 `adapter.config.json`；
 控制台/eval 注入时 `document.currentScript` 为空，请先设置：
 
 ```js
-window.DSH_HARDWARE_MONITOR_CONFIG_URL = 'http://127.0.0.1:5678/plugin/adapters/dsh/adapter.config.json';
+window.DSH_HARDWARE_MONITOR_CONFIG_URL = 'http://127.0.0.1:5678/plugins/dsh-hardware-monitor/adapter.config.json';
 window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUrl: 'http://127.0.0.1:5678' };
 ```
 

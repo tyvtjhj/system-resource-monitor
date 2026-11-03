@@ -63,7 +63,7 @@ function Fail([string]$Text) { Write-Host "[ERROR] $Text" -ForegroundColor Red; 
 function Test-Repo([string]$Path) {
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
     return (Test-Path (Join-Path $Path 'server.py')) -and
-           (Test-Path (Join-Path $Path 'plugin\adapters\dsh\install.ps1'))
+           (Test-Path (Join-Path $Path 'plugins\dsh-hardware-monitor\install.ps1'))
 }
 
 # ---------------------------------------------------------------- 1. 定位仓库
@@ -161,7 +161,7 @@ Ok "$pythonVersion（$venvPython）"
 
 # ---------------------------------------------------------------- 4. DSH 插件
 Step '安装 DSH 原生插件'
-$installer = Join-Path $Repo 'plugin\adapters\dsh\install.ps1'
+$installer = Join-Path $Repo 'plugins\dsh-hardware-monitor\install.ps1'
 if (-not (Test-Path $installer)) { Fail "缺少 DSH 安装脚本：$installer" }
 & powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Profile $Profile -Repo $Repo
 if ($LASTEXITCODE -ne 0) { Fail "DSH 插件安装失败（exit $LASTEXITCODE）。" }
@@ -207,4 +207,4 @@ Write-Host '  • 打开 DSH 并按 Ctrl+R 刷新：侧边栏「硬件监控」+
 Write-Host "  • 完整仪表盘：$serviceUrl/"
 Write-Host "  • 需要内核级 CPU 温度：关闭当前服务后运行 $Repo\run.bat（管理员）"
 Write-Host '  • 可选环境变量：HARDWARE_MONITOR_URL / HARDWARE_MONITOR_TOKEN（启动 DSH 前设置）'
-Write-Host "  • 卸载插件：powershell -ExecutionPolicy Bypass -File `"$Repo\plugin\adapters\dsh\uninstall.ps1`""
+Write-Host "  • 卸载插件：powershell -ExecutionPolicy Bypass -File `"$Repo\plugins\dsh-hardware-monitor\uninstall.ps1`""

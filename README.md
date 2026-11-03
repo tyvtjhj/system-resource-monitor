@@ -21,6 +21,8 @@ scripts/                bootstrap、lock-deps、doctor 等维护脚本
 run.bat / run-admin.bat Windows 启动脚本（优先 .venv）
 run.sh                  Linux / macOS 启动脚本
 docs/                   Code Wiki 与开发文档
+plugin/                 插件与缩略组件（embed.js / widget / 集成中心 / 适配器）
+plugins/dsh-hardware-monitor/  DSH 原生插件包（可用 install-dsh.ps1 安装；awesome-dsh-plugin 投稿入口）
 ```
 
 > T2 起后端拆分为 `hardware_monitor` 包：`platform/windows.py` 与 `platform/linux.py`
@@ -93,7 +95,7 @@ bash scripts/bootstrap.sh
 - `GET /api/plugin/manifest`：插件元数据（版本、能力表、鉴权方式）。
 - 宿主适配器在 `plugin/adapters/`：Web/DSH 注入、用户脚本、VS Code 系扩展、Codex 状态行，见 [plugin/README.md](plugin/README.md)。
 
-**DSH 原生插件（推荐）**：`plugin/adapters/dsh/` 提供输入框下方（composer dock）挂件、侧边栏完整面板与 `hardware_monitor_status` 工具。
+**DSH 原生插件（推荐）**：`plugins/dsh-hardware-monitor/` 提供输入框下方（composer dock）挂件、侧边栏完整面板与 `hardware_monitor_status` 工具。
 
 ### 一键安装（Windows）
 
@@ -114,7 +116,7 @@ GitHub 不可用时把 raw 地址换成 Gitee：
 
 前提：已安装 DSH 并至少启动过一次；Windows PowerShell 5.1+。脚本会复用 `scripts/bootstrap.ps1` 创建 `.venv` 并安装依赖，然后安装 DSH 插件、启动 5678 服务。
 
-手动安装：`powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\install.ps1`；
+手动安装：`powershell -ExecutionPolicy Bypass -File .\plugins\dsh-hardware-monitor\install.ps1`；
 刷新 DSH 页面（Ctrl+R）后输入框下方出现性能挂件，侧边栏出现「硬件监控」图标，点击打开原生完整面板。服务地址/Token 通过启动 DSH 前的
 `HARDWARE_MONITOR_URL` / `HARDWARE_MONITOR_TOKEN` 配置。
 

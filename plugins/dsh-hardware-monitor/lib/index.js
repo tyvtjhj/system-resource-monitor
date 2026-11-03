@@ -90,7 +90,7 @@ async function serviceReady() {
 function findRepo() {
   const candidates = [
     process.env.HARDWARE_MONITOR_REPO,
-    fileURLToPath(new URL('../../../..', import.meta.url)),
+    fileURLToPath(new URL('../../..', import.meta.url)),
     'C:\\Users\\13235\\Desktop\\性能监测\\hardware-monitor-2026-11-03',
   ].filter((item) => typeof item === 'string' && item.length > 0)
   for (const candidate of candidates) {

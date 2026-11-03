@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DSH_DIR = REPO_ROOT / "plugin" / "adapters" / "dsh"
+DSH_DIR = REPO_ROOT / "plugins" / "dsh-hardware-monitor"
 PROBE = REPO_ROOT / "tests" / "helpers" / "dsh_host_probe.mjs"
 NODE = shutil.which("node")
 
@@ -113,8 +113,8 @@ def test_dsh_client_bundle_contract():
     client = (DSH_DIR / "client.js").read_text(encoding="utf-8")
     assert "window.__ModuleLoader__.load" in client
     assert "id: 'dsh-hardware-monitor'" in client
-    assert "conversation.session.header.corner" in client
     assert "conversation.composer.dock" in client
+    assert "conversation.session.header.corner" not in client
     assert "/hardware-monitor-api/summary" in client
     if NODE:
         result = subprocess.run([NODE, "--check", str(DSH_DIR / "client.js")],
@@ -167,13 +167,13 @@ def test_dsh_skill_frontmatter():
 
 def test_dsh_plugin_assets_served_by_flask(client):
     for path in (
-        "/plugin/adapters/dsh/package.json",
-        "/plugin/adapters/dsh/client.js",
-        "/plugin/adapters/dsh/lib/index.js",
-        "/plugin/adapters/dsh/adapter.config.json",
-        "/plugin/adapters/dsh/SKILL.md",
+        "/plugins/dsh-hardware-monitor/package.json",
+        "/plugins/dsh-hardware-monitor/client.js",
+        "/plugins/dsh-hardware-monitor/lib/index.js",
+        "/plugins/dsh-hardware-monitor/adapter.config.json",
+        "/plugins/dsh-hardware-monitor/SKILL.md",
     ):
         resp = client.get(path)
         assert resp.status_code == 200, path
-    pkg = client.get("/plugin/adapters/dsh/package.json").get_json()
+    pkg = client.get("/plugins/dsh-hardware-monitor/package.json").get_json()
     assert pkg["name"] == "dsh-hardware-monitor"

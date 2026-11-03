@@ -76,12 +76,12 @@ def test_manifest_fields(client):
 
 
 def test_adapter_assets_are_served(client):
-    config_resp = client.get("/plugin/adapters/dsh/adapter.config.json")
+    config_resp = client.get("/plugins/dsh-hardware-monitor/adapter.config.json")
     assert config_resp.status_code == 200
     assert "application/json" in config_resp.headers["Content-Type"]
     assert "targetSelector" in config_resp.get_json()
 
-    inject = client.get("/plugin/adapters/dsh/inject.js")
+    inject = client.get("/plugins/dsh-hardware-monitor/inject.js")
     assert inject.status_code == 200
     assert "application/javascript" in inject.headers["Content-Type"]
     assert "HardwareMonitor" in inject.get_data(as_text=True)
@@ -92,29 +92,31 @@ def test_adapter_assets_are_served(client):
 
 
 def test_dsh_native_plugin_assets(client):
-    pkg = client.get("/plugin/adapters/dsh/package.json")
+    pkg = client.get("/plugins/dsh-hardware-monitor/package.json")
     assert pkg.status_code == 200
     manifest = pkg.get_json()
     assert manifest["name"] == "dsh-hardware-monitor"
     assert manifest["dsh"]["client"]["platform"] == "web"
     assert manifest["dsh"]["bundle"]["patch"] == "./cordis.patch.yml"
 
-    client_js = client.get("/plugin/adapters/dsh/client.js")
+    client_js = client.get("/plugins/dsh-hardware-monitor/client.js")
     assert client_js.status_code == 200
     assert "application/javascript" in client_js.headers["Content-Type"]
     assert "__ModuleLoader__" in client_js.get_data(as_text=True)
 
-    host_js = client.get("/plugin/adapters/dsh/lib/index.js")
+    host_js = client.get("/plugins/dsh-hardware-monitor/lib/index.js")
     assert host_js.status_code == 200
     assert "hardware_monitor_status" in host_js.get_data(as_text=True)
 
-    skill = client.get("/plugin/adapters/dsh/SKILL.md")
+    skill = client.get("/plugins/dsh-hardware-monitor/SKILL.md")
     assert skill.status_code == 200
     assert "hardware_monitor_status" in skill.get_data(as_text=True)
 
 
 def test_adapter_route_blocks_traversal(client):
     resp = client.get("/plugin/adapters/%2e%2e%2f%2e%2e%2fserver.py")
+    assert resp.status_code in (400, 404)
+    resp = client.get("/plugins/%2e%2e%2f%2e%2e%2fserver.py")
     assert resp.status_code in (400, 404)
 
 
@@ -126,7 +128,7 @@ def test_manifest_requires_token_when_configured(monkeypatch, client):
     assert ok.status_code == 200
     # 插件静态资源/适配器源文件不受 token 保护（iframe 与宿主加载需要）
     assert client.get("/embed.js").status_code == 200
-    assert client.get("/plugin/adapters/dsh/adapter.config.json").status_code == 200
+    assert client.get("/plugins/dsh-hardware-monitor/adapter.config.json").status_code == 200
 
 
 def test_widget_html_does_not_embed_token(client):
