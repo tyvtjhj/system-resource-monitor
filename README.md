@@ -19,6 +19,7 @@ requirements-dev.in/.txt 开发依赖（pytest / pytest-cov / ruff / pip-tools�
 scripts/                bootstrap、lock-deps、doctor 等维护脚本
 .env.example            环境变量示例（不会自动加载）
 run.bat / run-admin.bat Windows 启动脚本（优先 .venv）
+run-hidden.vbs          Windows 无控制台启动（pythonw，后台静默）
 run.sh                  Linux / macOS 启动脚本
 docs/                   Code Wiki 与开发文档
 plugin/                 插件与缩略组件（embed.js / widget / 集成中心 / 适配器）
@@ -55,6 +56,15 @@ $env:MONITOR_NO_ELEVATE='1'; py -3.10 server.py
 > 注意：PATH 上的 `python` 可能不是装了依赖的那个解释器，用 `py -3.10` 或 `run.bat` 最稳。
 
 `run.bat` / `run-admin.bat` 会把命令行参数透传给 `server.py`（例如 `run-admin.bat --no-elevate`）；`run-admin.bat` 提权重启时同样会带上这些参数。
+
+### 隐藏 Python 控制台（Windows）
+
+后台常驻时不想看到 Python 控制台窗口：
+
+- **双击 `run-hidden.vbs`**：用 `.venv\Scripts\pythonw.exe` 启动，完全无窗口（默认 `--no-elevate`，温度走 ACPI）；
+- **DSH 插件自动拉起**：插件已优先使用 `pythonw.exe`，不再弹出 Python 窗口；
+- **需要内核级 CPU 温度**：改用 `run.bat` / `run-admin.bat` 提权启动（会保留控制台用于日志）；
+- 已经有一个可见的 Python 窗口时，结束该 `python.exe` 进程即可；若插件在运行，它会自动用隐藏方式重新拉起。
 
 ## 可复制环境（T1）
 

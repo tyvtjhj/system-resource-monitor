@@ -106,13 +106,17 @@ function findRepo() {
 function findPython(repo) {
   const candidates = [
     process.env.HARDWARE_MONITOR_PYTHON,
+    // pythonw 无控制台；uv 的 venv python 会再拉起 base python 子进程并新建可见控制台，
+    // 因此自动启动优先 pythonw，避免 DSH 后台拉起服务时弹出 Python 窗口。
+    repo ? join(repo, '.venv', 'Scripts', 'pythonw.exe') : '',
     repo ? join(repo, '.venv', 'Scripts', 'python.exe') : '',
     repo ? join(repo, '.venv', 'bin', 'python') : '',
+    'pythonw',
     'python',
   ].filter(Boolean)
   for (const candidate of candidates) {
     try {
-      if (candidate === 'python' || existsSync(candidate)) return candidate
+      if (candidate === 'python' || (candidate === 'pythonw' && process.platform === 'win32') || existsSync(candidate)) return candidate
     } catch {
       /* 忽略 */
     }
