@@ -199,6 +199,7 @@ window.__ModuleLoader__.load({
     function mountSidebar(ctx) {
       let offRow = null;
       let offPanel = null;
+      let offPanelInject = null;
       try {
         ctx.slots.inject('sidebar.panellist', () => {
           try {
@@ -212,12 +213,18 @@ window.__ModuleLoader__.load({
         });
       } catch { /* ignore */ }
       try {
-        // key 必须与 sidebar.panellist 的 id 一致，宿主点击入口时按 key 打开该面板。
-        offPanel = ctx.slots.register({ name: 'main', key: 'hardware-monitor' }, HardwareMonitorPanel);
-      } catch { /* 宿主版本不支持主面板槽位 */ }
+        // 与 sidebar.panellist 的 id 对应：点击侧边栏图标时宿主打开 main key=hardware-monitor 的面板。
+        // 必须放在 slots.inject('main') 里注册，等布局声明 main 槽位后再注册，否则点击会因缺少条目抛错。
+        offPanelInject = ctx.slots.inject('main', () => {
+          try {
+            offPanel = ctx.slots.register({ name: 'main', key: 'hardware-monitor' }, HardwareMonitorPanel);
+          } catch { /* 宿主版本不支持主面板槽位 */ }
+        });
+      } catch { /* ignore */ }
       return () => {
         try { if (typeof offRow === 'function') offRow(); } catch { /* ignore */ }
         try { if (typeof offPanel === 'function') offPanel(); } catch { /* ignore */ }
+        try { if (typeof offPanelInject === 'function') offPanelInject(); } catch { /* ignore */ }
       };
     }
 
