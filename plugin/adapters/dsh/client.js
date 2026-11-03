@@ -132,7 +132,7 @@ window.__ModuleLoader__.load({
       };
       const dotStyle = { width: '7px', height: '7px', borderRadius: '50%', background: dotColor, flex: '0 0 auto' };
       const panelStyle = {
-        position: 'absolute', top: '30px', right: '0', zIndex: 60, minWidth: '230px',
+        position: 'absolute', bottom: '30px', right: '0', zIndex: 60, minWidth: '230px',
         padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(148,163,184,.35)',
         background: '#0f172a', color: '#e2e8f0', fontSize: '12px', lineHeight: '20px',
         boxShadow: '0 10px 30px rgba(0,0,0,.35)', fontFamily: 'ui-monospace,Menlo,Consolas,monospace',
@@ -183,13 +183,258 @@ window.__ModuleLoader__.load({
       h('path', { d: 'M5.5 13.5h5', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }));
     }
 
-    /** 侧边栏「完整面板」页：内嵌监控仪表盘（token 从 localStorage 读取）。 */
+    /**
+     * 侧边栏「完整面板」页：原生 React 面板，不再用 iframe。
+     *
+     * 仪表盘页面带 `Content-Security-Policy: frame-ancestors 'self'`，DSH 的 iframe 属于
+     * 不同 origin 会被浏览器拦截 → 空白。这里改为直接请求 DSH 同源代理
+     * `/hardware-monitor-api/{summary,processes}`，在宿主内渲染完整数据。
+     */
     function HardwareMonitorPanel() {
-      return h('iframe', {
-        src: dashboardUrl(DEFAULT_BASE),
-        title: 'Hardware Monitor',
-        style: { width: '100%', height: '100%', border: '0', display: 'block' },
+      const [state, setState] = React.useState({
+        data: null, processes: null, offline: false, updatedAt: null, baseUrl: DEFAULT_BASE,
       });
+      const [tick, setTick] = React.useState(0);
+      const rootRef = React.useRef(null);
+
+      React.useEffect(() => {
+        let cancelled = false;
+        let timer = null;
+        let failures = 0;
+
+        async function poll() {
+          if (cancelled) return;
+          if (document.hidden) {
+            timer = setTimeout(poll, REFRESH_MS);
+            return;
+          }
+          try {
+            const [summaryResp, processResp] = await Promise.all([
+              fetch('/hardware-monitor-api/summary', { cache: 'no-store' }),
+              fetch('/hardware-monitor-api/processes', { cache: 'no-store' }).catch(() => null),
+            ]);
+            if (!summaryResp.ok) throw new Error(`HTTP ${summaryResp.status}`);
+            const summary = await summaryResp.json();
+            if (!summary || summary.ok !== true) throw new Error((summary && summary.error) || 'offline');
+            let processes = null;
+            if (processResp && processResp.ok) {
+              try { processes = await processResp.json(); } catch { processes = null; }
+            }
+            if (cancelled) return;
+            failures = 0;
+            setState({
+              data: summary.data || null,
+              processes,
+              offline: false,
+              updatedAt: new Date(),
+              baseUrl: summary.base_url || DEFAULT_BASE,
+            });
+            timer = setTimeout(poll, REFRESH_MS);
+          } catch (error) {
+            if (cancelled) return;
+            failures += 1;
+            setState((prev) => ({ ...prev, offline: true }));
+            timer = setTimeout(poll, BACKOFF[Math.min(failures - 1, BACKOFF.length - 1)]);
+          }
+        }
+
+        poll();
+        const onVisibility = () => {
+          if (!document.hidden) {
+            if (timer) clearTimeout(timer);
+            poll();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+          cancelled = true;
+          if (timer) clearTimeout(timer);
+          document.removeEventListener('visibilitychange', onVisibility);
+        };
+      }, [tick]);
+
+      // 切换侧边栏面板时，把外层主区域滚回顶部，避免标题被上一页的滚动位置顶出视口。
+      React.useEffect(() => {
+        const node = rootRef.current;
+        if (!node) return;
+        if (node.scrollTop) node.scrollTop = 0;
+        let parent = node.parentElement;
+        while (parent && parent !== document.body) {
+          if (parent.scrollHeight > parent.clientHeight + 1) {
+            parent.scrollTop = 0;
+            break;
+          }
+          parent = parent.parentElement;
+        }
+      }, []);
+
+      const data = state.data || {};
+      const cpu = data.cpu || {};
+      const memory = data.memory || {};
+      const gpu = data.gpu || {};
+      const temperature = data.temperature || {};
+      const network = data.network_speed || {};
+      const system = data.system_info || {};
+      const disks = Array.isArray(data.disk) ? data.disk : [];
+      const processList = state.processes && Array.isArray(state.processes.processes) ? state.processes.processes : [];
+      const cores = Array.isArray(cpu.per_core) ? cpu.per_core : [];
+
+      const cpuUsage = num(cpu.usage);
+      const memUsage = num(memory.usage_percent);
+      const gpuUsage = num(gpu.usage);
+      const cpuTemp = temperature.cpu ? num(temperature.cpu.value) : null;
+      const gpuTemp = temperature.gpu ? num(temperature.gpu.value) : null;
+      const mainTemp = cpuTemp !== null ? cpuTemp : gpuTemp;
+      const download = num(network.download_mbps);
+      const upload = num(network.upload_mbps);
+      const latency = num(data.latency_ms);
+
+      const panelStyle = {
+        height: '100%', overflowY: 'auto', padding: '16px 18px 24px', boxSizing: 'border-box',
+        color: 'var(--dsw-alias-label-primary,#1f2328)',
+        fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif',
+      };
+      const cardStyle = {
+        background: 'var(--dsw-alias-bg-layer-1,#fff)',
+        border: '1px solid var(--dsw-alias-border-l2,#e5e7eb)',
+        borderRadius: '12px', padding: '12px 14px', minWidth: 0,
+      };
+      const labelStyle = { color: 'var(--dsw-alias-label-secondary,#6b7280)', fontSize: '12px', lineHeight: '18px' };
+      const valueStyle = {
+        color: 'var(--dsw-alias-label-primary,#1f2328)', fontSize: '22px', fontWeight: 700,
+        lineHeight: '28px', fontVariantNumeric: 'tabular-nums',
+      };
+      const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' };
+      const barBg = {
+        height: '6px', borderRadius: '999px',
+        background: 'var(--dsw-alias-bg-layer-2,#eef0f4)', overflow: 'hidden',
+      };
+      const barFill = (percent) => ({
+        height: '100%', width: `${Math.max(0, Math.min(100, percent || 0))}%`, borderRadius: '999px',
+        background: percent >= 85 ? '#ef4444' : percent >= 65 ? '#f59e0b' : '#10b981',
+      });
+      const gridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px', marginTop: '12px' };
+      const sectionStyle = { ...cardStyle, marginTop: '12px' };
+      const buttonStyle = {
+        border: '1px solid var(--dsw-alias-border-l2,#d5d9e0)',
+        background: 'var(--dsw-alias-bg-layer-1,#fff)', color: 'inherit', borderRadius: '8px',
+        padding: '4px 10px', fontSize: '12px', lineHeight: '18px', cursor: 'pointer', textDecoration: 'none',
+      };
+
+      function metricCard(label, valueText, subText, percent) {
+        return h('div', { key: label, style: cardStyle },
+          h('div', { style: labelStyle }, label),
+          h('div', { style: valueStyle }, valueText),
+          subText ? h('div', { style: { ...labelStyle, fontSize: '11px' } }, subText) : null,
+          typeof percent === 'number'
+            ? h('div', { style: { ...barBg, marginTop: '8px' } }, h('div', { style: barFill(percent) }))
+            : null);
+      }
+
+      return h('div', { ref: rootRef, style: panelStyle },
+        h('div', {
+          style: {
+            ...rowStyle, marginBottom: '8px', position: 'sticky', top: 0, zIndex: 2,
+            background: 'var(--dsw-alias-bg-layer-2,#f7f8fa)', paddingBottom: '8px',
+          },
+        },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 } },
+            h('span', {
+              style: {
+                width: '8px', height: '8px', borderRadius: '50%', flex: '0 0 auto',
+                background: state.offline ? '#ef4444' : '#10b981',
+              },
+            }),
+            h('strong', { style: { fontSize: '16px' } }, '硬件监控'),
+            h('span', { style: labelStyle }, state.offline ? '离线' : '在线'),
+            state.updatedAt
+              ? h('span', { style: { ...labelStyle, fontSize: '11px' } }, `更新于 ${state.updatedAt.toLocaleTimeString()}`)
+              : null),
+          h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+            h('button', { type: 'button', style: buttonStyle, onClick: () => setTick((value) => value + 1) }, '刷新'),
+            h('a', { href: dashboardUrl(state.baseUrl), target: '_blank', rel: 'noopener', style: buttonStyle }, '在浏览器打开 ↗'))),
+
+        state.offline && !state.data
+          ? h('div', { style: { ...cardStyle, marginTop: '12px', borderColor: '#f59e0b' } },
+              h('strong', {}, '监控服务不可用'),
+              h('div', { style: { ...labelStyle, marginTop: '4px' } }, 'DSH 插件会自动拉起 5678；也可手动运行 run.bat。'),
+              h('div', { style: { ...labelStyle, marginTop: '2px' } }, `当前地址：${state.baseUrl}`))
+          : null,
+
+        h('div', { style: gridStyle },
+          metricCard('CPU', `${fmt(cpuUsage)}%`, `${fmt(cpu.freq_current_mhz)} MHz · ${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`, cpuUsage),
+          metricCard('内存', `${fmt(memUsage)}%`, `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`, memUsage),
+          metricCard('GPU', `${fmt(gpuUsage)}%`, `${gpu.name || '--'} · 显存 ${fmt(gpu.used_gb, 1)}/${fmt(gpu.total_gb, 1)} GB`, gpuUsage),
+          metricCard('温度', mainTemp === null ? '--' : `${fmt(mainTemp, 1)}°C`, temperature.cpu && temperature.cpu.source ? `来源 ${temperature.cpu.source}` : '', null),
+          metricCard('下载', download === null ? '--' : `${fmt(download, 1)} MB/s`, '整机网络合计', null),
+          metricCard('上传', upload === null ? '--' : `${fmt(upload, 1)} MB/s`, '整机网络合计', null)),
+
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '12px', alignItems: 'flex-start' } },
+          h('div', { style: { ...cardStyle, flex: '1 1 360px', minWidth: '280px' } },
+            h('div', { style: rowStyle },
+              h('strong', {}, 'CPU 各核心'),
+              h('span', { style: labelStyle }, `${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`)),
+            cores.length === 0
+              ? h('div', { style: { ...labelStyle, marginTop: '8px' } }, cpuUsage === null ? '等待数据…' : '核心明细不可用')
+              : h('div', {
+                  style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(86px,1fr))', gap: '8px', marginTop: '10px' },
+                }, cores.map((value, index) => h('div', { key: `core-${index}` },
+                  h('div', { style: { ...rowStyle, fontSize: '11px', color: 'var(--dsw-alias-label-secondary,#6b7280)' } },
+                    h('span', {}, `C${index}`), h('span', {}, `${fmt(value)}%`)),
+                  h('div', { style: barBg }, h('div', { style: barFill(num(value) || 0) })))))),
+          h('div', { style: { ...cardStyle, flex: '1 1 260px', minWidth: '240px' } },
+            h('strong', {}, '内存 / GPU / 温度'),
+            h('div', { style: { ...rowStyle, marginTop: '8px' } },
+              h('span', { style: labelStyle }, '内存'),
+              h('span', { style: { fontSize: '12px' } }, `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`)),
+            h('div', { style: { ...barBg, marginTop: '4px' } }, h('div', { style: barFill(memUsage || 0) })),
+            h('div', { style: { ...rowStyle, marginTop: '8px' } },
+              h('span', { style: labelStyle }, 'GPU'),
+              h('span', { style: { fontSize: '12px' } }, `${gpu.name || '--'} · ${fmt(gpuUsage)}%`)),
+            h('div', { style: { ...rowStyle, marginTop: '4px' } },
+              h('span', { style: labelStyle }, '温度'),
+              h('span', { style: { fontSize: '12px' } },
+                `CPU ${cpuTemp === null ? '--' : `${fmt(cpuTemp, 1)}°C`} · GPU ${gpuTemp === null ? '--' : `${fmt(gpuTemp, 1)}°C`}`)),
+            h('div', { style: { ...rowStyle, marginTop: '4px' } },
+              h('span', { style: labelStyle }, '延迟'),
+              h('span', { style: { fontSize: '12px' } }, `${fmt(latency, 1)} ms`)))),
+
+        h('div', { style: sectionStyle },
+          h('div', { style: rowStyle },
+            h('strong', {}, '磁盘'),
+            h('span', { style: labelStyle }, `${disks.length} 个分区`)),
+          disks.length === 0
+            ? h('div', { style: { ...labelStyle, marginTop: '6px' } }, '无磁盘数据')
+            : disks.map((disk) => h('div', { key: disk.device || disk.mountpoint, style: { marginTop: '8px' } },
+                h('div', { style: rowStyle },
+                  h('span', { style: { fontSize: '12px' } }, `${disk.device || disk.mountpoint}${disk.fstype ? ` · ${disk.fstype}` : ''}`),
+                  h('span', { style: { ...labelStyle, fontVariantNumeric: 'tabular-nums' } },
+                    `${fmt(disk.free_gb, 1)} GB 可用 / ${fmt(disk.total_gb, 1)} GB · ${fmt(disk.usage_percent)}%`)),
+                h('div', { style: barBg }, h('div', { style: barFill(num(disk.usage_percent) || 0) }))))),
+
+        h('div', { style: sectionStyle },
+          h('div', { style: rowStyle },
+            h('strong', {}, '进程 Top'),
+            h('span', { style: labelStyle }, state.processes && state.processes.process_count != null ? `共 ${state.processes.process_count} 个进程` : '进程列表不可用')),
+          processList.length === 0
+            ? h('div', { style: { ...labelStyle, marginTop: '6px' } }, '暂无进程数据')
+            : h('div', {
+                style: {
+                  marginTop: '8px', display: 'grid',
+                  gridTemplateColumns: 'minmax(0,1fr) auto auto auto', gap: '6px 12px', fontSize: '12px',
+                },
+              },
+              h('div', { style: labelStyle }, '进程'), h('div', { style: { ...labelStyle, textAlign: 'right' } }, 'PID'),
+              h('div', { style: { ...labelStyle, textAlign: 'right' } }, '私有内存'), h('div', { style: { ...labelStyle, textAlign: 'right' } }, '工作集'),
+              processList.slice(0, 10).flatMap((item) => [
+                h('div', { key: `${item.name}-name`, style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, item.name),
+                h('div', { key: `${item.name}-pid`, style: { ...labelStyle, textAlign: 'right' } }, String(item.pids != null ? item.pids : '--')),
+                h('div', { key: `${item.name}-private`, style: { ...labelStyle, textAlign: 'right' } }, `${fmt(item.private_mb, 1)} MB`),
+                h('div', { key: `${item.name}-ws`, style: { ...labelStyle, textAlign: 'right' } }, `${fmt(item.working_set_mb, 1)} MB`),
+              ]))),
+
+        h('div', { style: { ...labelStyle, marginTop: '10px', fontSize: '11px' } },
+          `开机 ${system.uptime || '--'} · 平台 ${(data.platform || {}).os || '--'} · 延迟 ${fmt(latency, 1)} ms`));
     }
 
     /**
@@ -257,10 +502,8 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         // 侧边栏入口 + 完整面板（像插件市场一样有图标入口）
         mountSidebar(ctx);
-        // 首选会话区右上角；若该 slot 在当前版本不可用，退回输入框 dock（官方模板位）。
-        if (!mountAt(ctx, 'conversation.session.header.corner', 60)) {
-          mountAt(ctx, 'conversation.composer.dock', 60);
-        }
+        // 按用户要求：性能小挂件只放在输入框下方的 composer dock，不再占用对话区右上角。
+        mountAt(ctx, 'conversation.composer.dock', 60);
       },
     };
   },

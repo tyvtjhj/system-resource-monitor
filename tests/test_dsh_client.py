@@ -27,9 +27,11 @@ def test_dsh_client_registers_sidebar_entry_and_panel():
     assert result.returncode == 0, f"client probe failed: {result.stderr[-800:]}"
     payload = json.loads(result.stdout)
     assert payload["id"] == "dsh-hardware-monitor"
+    assert payload["panelRender"] == "ok", payload
 
     registrations = payload["registrations"]
     names = [(item["name"], item.get("id") or item.get("key")) for item in registrations]
     assert ("sidebar.panellist", "hardware-monitor") in names, names
     assert ("main", "hardware-monitor") in names, names
-    assert ("conversation.session.header.corner", "hardware-monitor") in names, names
+    assert ("conversation.composer.dock", "hardware-monitor") in names, names
+    assert all(item["name"] != "conversation.session.header.corner" for item in registrations), names

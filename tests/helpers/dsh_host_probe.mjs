@@ -61,6 +61,7 @@ try {
 
 const summary = await callRoute('/hardware-monitor-api/summary');
 const health = await callRoute('/hardware-monitor-api/health');
+const processes = await callRoute('/hardware-monitor-api/processes');
 
 function safeJson(text) {
   try { return JSON.parse(text); } catch { return null; }
@@ -70,4 +71,5 @@ console.log(JSON.stringify({
   tool: toolResult,
   summary: { status: summary.status, payload: safeJson(summary.body) },
   health: { status: health.status, payload: safeJson(health.body) },
+  processes: { status: processes.status, payload: safeJson(processes.body) },
 }));

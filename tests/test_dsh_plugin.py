@@ -51,6 +51,15 @@ class _FakeMonitorHandler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path == "/api/all":
             self._send(200, SNAPSHOT)
+        elif path == "/api/processes":
+            self._send(200, {
+                "count": 1,
+                "process_count": 42,
+                "processes": [{
+                    "name": "fake.exe", "pids": 2, "private_mb": 10.0,
+                    "private_percent": 1.0, "working_set_mb": 20.0, "working_set_percent": 2.0,
+                }],
+            })
         elif path == "/api/start":
             self._send(200, {"status": "ok", "ready": True, "elevated": False,
                              "host": "127.0.0.1", "port": 0, "platform": "windows"})
@@ -134,6 +143,11 @@ def test_dsh_host_plugin_routes_and_tool(fake_monitor):
     health = probe["health"]
     assert health["status"] == 200
     assert health["payload"]["ok"] is True
+
+    processes = probe["processes"]
+    assert processes["status"] == 200
+    assert processes["payload"]["process_count"] == 42
+    assert processes["payload"]["processes"][0]["name"] == "fake.exe"
 
 
 def test_dsh_host_plugin_reports_service_down():
