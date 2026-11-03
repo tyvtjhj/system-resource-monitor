@@ -82,7 +82,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 40px;
+      margin-bottom: 28px;
     }
 
     .header-left h1 {
@@ -163,15 +163,16 @@
     .sys-label { font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 1px; color: var(--text-tertiary); }
     .sys-value { font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text-primary); }
 
-    /* Grid */
-    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-bottom: 24px; }
-    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px; }
+    /* Grid：单一 12 列轨道 + 显式跨列，两行卡片宽度保持一致 */
+    .grid-3 { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; margin-bottom: 24px; }
+    .grid-3 > .card { grid-column: span 4; }
+    .grid-3 > .card--full { grid-column: span 12; }
 
     /* Card */
     .card {
       background: var(--card);
       border-radius: var(--radius);
-      padding: 28px;
+      padding: 24px;
       box-shadow: var(--shadow-sm);
       transition: box-shadow 0.3s ease, transform 0.2s ease;
     }
@@ -183,14 +184,15 @@
 
     /* Circular gauge */
     .gauge-wrap { display: flex; justify-content: center; margin-bottom: 20px; }
-    .gauge-svg { width: 240px; height: 240px; }
+    .gauge-svg { width: 210px; height: 210px; }
 
     .gauge-bg { fill: none; stroke: var(--track); stroke-width: 18; }
     .gauge-fill { fill: none; stroke-width: 18; stroke-linecap: round; transition: stroke-dasharray 0.6s ease, stroke 0.3s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.08)); }
     .gauge-ticks { fill: #cbd5e1; font-size: 9px; font-family: 'DM Mono', monospace; }
 
-    .gauge-value { font-family: 'DM Mono', monospace; font-weight: 500; fill: var(--text-primary); }
-    .gauge-unit { font-family: 'Noto Sans SC', sans-serif; font-size: 14px; fill: var(--text-secondary); }
+    /* 读数用大字号建立层级；tabular-nums 避免每次刷新时数字宽度跳动 */
+    .gauge-value { font-family: 'DM Mono', monospace; font-size: 48px; font-weight: 500; font-variant-numeric: tabular-nums; fill: var(--text-primary); }
+    .gauge-unit { font-family: 'Noto Sans SC', sans-serif; font-size: 15px; fill: var(--text-secondary); }
 
     /* Info row */
     .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
@@ -201,9 +203,29 @@
     /* Sparkline */
     canvas.sparkline { width: 100%; height: 64px; }
 
+    /* NETWORK 卡片随行高伸展，折线占满剩余空间 */
+    .card--network { display: flex; flex-direction: column; }
+    .card--network .sparkline { flex: 1 1 120px; height: auto; min-height: 120px; }
+
+    /* TEMPERATURE 整行条带：左侧读数、右侧曲线 */
+    .card--temp .temp-strip { display: grid; grid-template-columns: 180px 1fr; gap: 28px; align-items: center; }
+    .card--temp .sparkline { height: 72px; }
+    .temp-stats { display: grid; gap: 12px; }
+
+    /* 交互与状态 */
+    .card[data-panel] { cursor: pointer; }
+    .card[data-panel]:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
+    .status-dot.offline { background: var(--accent-red); animation: none; }
+    .is-stale .gauge-svg { opacity: 0.45; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+
     /* Responsive */
     @media (max-width: 1024px) {
-      .grid-2, .grid-3 { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 > .card { grid-column: span 6; }
+      .card--temp .temp-strip { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 768px) {
@@ -215,12 +237,12 @@
     }
 
     @media (max-width: 600px) {
-      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .grid-3 > .card, .grid-3 > .card--full { grid-column: span 12; }
       .header-left h1 { font-size: 22px; }
       .time-display { font-size: 20px; }
     }
 
-    /* Error state */
+    /* 遮罩 */
     .sidebar-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.3); opacity: 0; pointer-events: none;
@@ -228,52 +250,21 @@
     }
     .sidebar-overlay.active { opacity: 1; pointer-events: auto; }
 
-    /* Sidebar */
-    .sidebar-overlay {
-      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.3); opacity: 0; pointer-events: none;
-      transition: opacity 0.3s ease; z-index: 999;
-    }
-    .sidebar-overlay.active { opacity: 1; pointer-events: auto; }
-
-    /* Disk sidebar - opens from right */
-    #diskSidebar {
-      position: fixed; top: 0; right: -420px; bottom: 0; width: 420px;
+    /* 侧栏统一右滑：宽度不超出视口，隐藏时移出可聚焦序列 */
+    .sidebar {
+      position: fixed; top: 0; right: -100%; bottom: 0;
+      width: min(440px, 92vw);
       background: var(--card); z-index: 1000; overflow-y: auto;
-      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      padding-top: 80px; padding-bottom: 40px;
-    }
-    #diskSidebar.active { right: 0; }
-
-    /* CPU cores sidebar - also opens from right */
-    #coreSidebar {
-      position: fixed; top: 0; right: -500px; bottom: 0; width: 500px;
-      background: var(--card); z-index: 1002; overflow-y: auto;
-      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1), left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      padding-top: 80px; padding-bottom: 40px;
       box-shadow: -4px 0 20px rgba(0,0,0,0.1);
-    }
-    #coreSidebar.active { right: 0; left: auto; }
-
-    /* Memory sidebar */
-    #memSidebar {
-      position: fixed; top: 0; right: -420px; bottom: 0; width: 420px;
-      background: var(--card); z-index: 1003; overflow-y: auto;
-      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
       padding-top: 80px; padding-bottom: 40px;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+      visibility: hidden;
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.35s;
     }
-    #memSidebar.active { right: 0; }
-
-    /* Network sidebar */
-    #netSidebar {
-      position: fixed; top: 0; right: -440px; bottom: 0; width: 440px;
-      background: var(--card); z-index: 1004; overflow-y: auto;
-      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      padding-top: 80px; padding-bottom: 40px;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+    .sidebar.active {
+      right: 0; visibility: visible;
+      transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s;
     }
-    #netSidebar.active { right: 0; }
+    .sidebar:focus { outline: none; }
 
     .net-card { background: var(--bg); border-radius: 12px; padding: 14px 16px; }
     .net-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
@@ -334,10 +325,6 @@
     .proc-bar-bg { height: 4px; background: var(--track-strong); border-radius: 2px; margin-top: 8px; overflow: hidden; }
     .proc-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
 
-    @media (max-width: 900px) {
-      .sidebar { width: 100%; right: -100%; }
-    }
-
     /* Error state */
     .error-state { display: none; background: var(--error-bg); border-radius: var(--radius); padding: 32px; text-align: center; margin-bottom: 24px; }
     .error-state.active { display: block; }
@@ -361,7 +348,11 @@
     <header>
       <div class="header-left">
         <h1>Hardware Monitor</h1>
-        <div class="subtitle"><span class="status-dot"></span> Monitoring Active</div>
+        <div class="subtitle">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">正在连接…</span>
+          <span id="statusMeta"></span>
+        </div>
       </div>
       <div class="header-right">
         <button class="theme-toggle" onclick="toggleTheme()" title="切换暗色/亮色"><span id="themeLabel">🌙 暗色</span></button>
@@ -369,6 +360,7 @@
         <div class="date-display" id="dateDisplay">YYYY-MM-DD</div>
       </div>
     </header>
+    <p class="sr-only" id="liveStatus" role="status" aria-live="polite"></p>
 
     <!-- Overall health -->
     <div class="health-bar-container">
@@ -385,58 +377,57 @@
       <div class="sys-item"><span class="sys-label">THREADS</span><span class="sys-value" id="procThreads">--</span></div>
     </div>
 
-    <!-- Row 1: CPU + Memory + Disk -->
+    <!-- 指标卡：单一 12 列栅格，每张卡 span 4，温度卡整行 -->
     <div class="grid-3">
       <!-- CPU CORES (moved to sidebar, opened by clicking CPU card) -->
-      <div class="card" onclick="openCoreSidebar()" style="cursor: pointer;">
+      <div class="card" data-panel="cores" data-gauge-card role="button" tabindex="0" aria-haspopup="dialog" aria-controls="coreSidebar">
         <div class="card-header"><span class="card-title">CPU</span><span class="badge" id="cpuBadge">-- MHz</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="cpuGauge"></svg></div>
         <div id="cpuInfo"></div>
       </div>
 
-      <div class="card" onclick="openMemSidebar()" style="cursor: pointer;">
+      <div class="card" data-panel="memory" data-gauge-card role="button" tabindex="0" aria-haspopup="dialog" aria-controls="memSidebar">
         <div class="card-header"><span class="card-title">MEMORY</span><span class="badge" id="memBadge">-- GB / -- GB</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="memGauge"></svg></div>
         <div id="memInfo"></div>
       </div>
 
-      <div class="card" onclick="openDiskSidebar()" style="cursor: pointer;">
+      <div class="card" data-panel="disk" data-gauge-card role="button" tabindex="0" aria-haspopup="dialog" aria-controls="diskSidebar">
         <div class="card-header"><span class="card-title">DISK</span><span class="badge" id="diskBadge">-- GB / -- GB</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="diskGauge"></svg></div>
         <div id="diskInfo"></div>
       </div>
-    </div>
 
-    <!-- Row 2: Network + GPU + Temp -->
-    <div class="grid-3">
-      <div class="card" onclick="openNetSidebar()" style="cursor: pointer;">
-        <div class="card-header"><span class="card-title">NETWORK</span><span class="badge">Mbps</span></div>
+      <div class="card card--network" data-panel="network" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="netSidebar">
+        <div class="card-header"><span class="card-title">NETWORK</span><span class="badge">MiB/s</span></div>
         <canvas class="sparkline" id="netSparkline"></canvas>
         <div style="display:flex; gap:24px; margin-top:16px;">
-          <div><span class="info-label">DOWNLOAD</span><br/><span class="info-value" id="dlSpeed">0 MB/s</span></div>
-          <div><span class="info-label">UPLOAD</span><br/><span class="info-value" id="ulSpeed">0 MB/s</span></div>
+          <div><span class="info-label">DOWNLOAD</span><br/><span class="info-value" id="dlSpeed">0.0 MiB/s</span></div>
+          <div><span class="info-label">UPLOAD</span><br/><span class="info-value" id="ulSpeed">0.0 MiB/s</span></div>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" data-gauge-card>
         <div class="card-header"><span class="card-title">GPU</span><span class="badge" id="gpuBadge">--%</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="gpuGauge"></svg></div>
         <div id="gpuInfo"></div>
       </div>
 
       <!-- 核显（集成显卡） -->
-      <div class="card">
+      <div class="card" data-gauge-card>
         <div class="card-header"><span class="card-title">iGPU</span><span class="badge" id="igpuBadge">--%</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="igpuGauge"></svg></div>
         <div id="igpuInfo"></div>
       </div>
 
-      <div class="card">
+      <div class="card card--full card--temp">
         <div class="card-header"><span class="card-title">TEMPERATURE</span><span class="badge" id="tempBadge">--°C AVG</span></div>
-        <canvas class="sparkline" id="tempSparkline"></canvas>
-        <div style="display:flex; gap:24px; margin-top:16px;">
-          <div><span class="info-label"><span class="legend-dot" style="background:#3b82f6"></span><span id="cpuTempLabel">CPU</span></span><br/><span class="info-value" id="cpuTemp">--°C</span></div>
-          <div><span class="info-label"><span class="legend-dot" style="background:#ef4444"></span>GPU</span><br/><span class="info-value" id="gpuTemp">--°C</span></div>
+        <div class="temp-strip">
+          <div class="temp-stats">
+            <div><span class="info-label"><span class="legend-dot" style="background:#3b82f6"></span><span id="cpuTempLabel">CPU</span></span><br/><span class="info-value" id="cpuTemp">--°C</span></div>
+            <div><span class="info-label"><span class="legend-dot" style="background:#ef4444"></span>GPU</span><br/><span class="info-value" id="gpuTemp">--°C</span></div>
+          </div>
+          <canvas class="sparkline" id="tempSparkline"></canvas>
         </div>
       </div>
 
@@ -446,9 +437,9 @@
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   
   <!-- Storage Sidebar -->
-  <aside class="sidebar" id="diskSidebar">
-    <button class="sidebar-close" onclick="closeDiskSidebar()">✕</button>
-    <h2 class="sidebar-title">STORAGE DETAILS</h2>
+  <aside class="sidebar" id="diskSidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="diskSidebarTitle" tabindex="-1">
+    <button class="sidebar-close" onclick="closeDiskSidebar()" aria-label="关闭存储详情">✕</button>
+    <h2 class="sidebar-title" id="diskSidebarTitle">STORAGE DETAILS</h2>
 
     <section id="sidebarPhysicalDisks">
       <h3 class="sidebar-section-title">PHYSICAL DISKS</h3>
@@ -464,9 +455,9 @@
   </aside>
 
   <!-- CPU Cores Sidebar -->
-  <aside class="sidebar" id="coreSidebar">
-    <button class="sidebar-close" onclick="closeCoreSidebar()">✕</button>
-    <h2 class="sidebar-title">CPU CORES</h2>
+  <aside class="sidebar" id="coreSidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="coreSidebarTitle" tabindex="-1">
+    <button class="sidebar-close" onclick="closeCoreSidebar()" aria-label="关闭 CPU 核心详情">✕</button>
+    <h2 class="sidebar-title" id="coreSidebarTitle">CPU CORES</h2>
 
     <div style="padding: 0 32px;">
       <span class="info-label">OVERALL LOAD</span><br/>
@@ -484,9 +475,9 @@
   </aside>
 
   <!-- Memory Sidebar -->
-  <aside class="sidebar" id="memSidebar">
-    <button class="sidebar-close" onclick="closeMemSidebar()">✕</button>
-    <h2 class="sidebar-title">MEMORY DETAILS</h2>
+  <aside class="sidebar" id="memSidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="memSidebarTitle" tabindex="-1">
+    <button class="sidebar-close" onclick="closeMemSidebar()" aria-label="关闭内存详情">✕</button>
+    <h2 class="sidebar-title" id="memSidebarTitle">MEMORY DETAILS</h2>
 
     <div style="padding: 0 32px;">
       <span class="info-label">RSS 合计 / 物理内存</span><br/>
@@ -510,9 +501,9 @@
   </aside>
 
   <!-- Network Sidebar (网卡详情) -->
-  <aside class="sidebar" id="netSidebar">
-    <button class="sidebar-close" onclick="closeNetSidebar()">✕</button>
-    <h2 class="sidebar-title">NETWORK DETAILS</h2>
+  <aside class="sidebar" id="netSidebar" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="netSidebarTitle" tabindex="-1">
+    <button class="sidebar-close" onclick="closeNetSidebar()" aria-label="关闭网卡详情">✕</button>
+    <h2 class="sidebar-title" id="netSidebarTitle">NETWORK DETAILS</h2>
 
     <div style="padding: 0 32px;">
       <div id="netAdapterList" style="display: grid; gap: 10px;"></div>
@@ -533,6 +524,7 @@
     const TOKEN = new URLSearchParams(location.search).get('token') || '';
     const REFRESH_MS = 2000;   // 轮询间隔：原 800ms 小于单次响应耗时，请求会首尾相接
     let connected = false;
+    let lastOkAt = null;   // 最近一次成功取数的时间，用于「数据已过期」提示
     let pollTimer = null;
     // 平台能力表（/api/all 的 platform.capabilities）；缺省视为支持，兼容旧后端
     let platformCaps = {};
@@ -549,6 +541,29 @@
       const el = document.getElementById(id);
       if (el) el.textContent = text;
       return el;
+    }
+
+    // 连接状态：状态点、副标题、最后更新时间、陈旧数据标记，并播报给读屏
+    function setConnectionState(ok) {
+      connected = ok;
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      const meta = document.getElementById('statusMeta');
+      const live = document.getElementById('liveStatus');
+      if (dot) dot.classList.toggle('offline', !ok);
+      if (text) text.textContent = ok ? 'Monitoring Active' : '连接中断';
+      if (meta) {
+        meta.textContent = lastOkAt
+          ? `· 上次更新 ${lastOkAt.toLocaleTimeString('zh-CN', { hour12: false })}`
+          : '';
+      }
+      document.querySelectorAll('[data-gauge-card]').forEach((card) => {
+        card.classList.toggle('is-stale', !ok);
+      });
+      if (live && live.dataset.state !== String(ok)) {
+        live.dataset.state = String(ok);
+        live.textContent = ok ? '已连接到采集服务' : '与采集服务的连接已中断';
+      }
     }
 
     // ---- CLOCK ----
@@ -637,7 +652,8 @@
       const svg = document.getElementById(svgId);
       const r = 85;
 
-      const bg = document.createElementNS(ns, 'circle'); bg.setAttribute('cx', 120); bg.setAttribute('cy', 120); bg.setAttribute('r', r + 8);
+      // 轨道与进度弧共用同一半径，彩色进度才叠在灰色轨道中心线上（原先 bg 用 r+8，两圈错开）
+      const bg = document.createElementNS(ns, 'circle'); bg.setAttribute('cx', 120); bg.setAttribute('cy', 120); bg.setAttribute('r', r);
       bg.classList.add('gauge-bg'); svg.appendChild(bg);
 
       const fill = document.createElementNS(ns, 'circle'); fill.setAttribute('cx', 120); fill.setAttribute('cy', 120); fill.setAttribute('r', r);
@@ -686,14 +702,15 @@
       try {
         const resp = await apiFetch('/api/all');
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        connected = true;
+        lastOkAt = new Date();
+        setConnectionState(true);
         document.getElementById('errorState').classList.remove('active');
 
         const data = await resp.json();
         updateDashboard(data);
       } catch (err) {
         console.error(err);
-        connected = false;
+        setConnectionState(false);
         document.getElementById('errorState').classList.add('active');
         document.getElementById('errorMsg').textContent = `连接失败: ${API_BASE} — 请确认 server.py 正在运行`;
       }
@@ -796,8 +813,8 @@
       }
       // Network speed + sparkline
       if (data.network_speed) {
-        document.getElementById('dlSpeed').textContent = `${data.network_speed.download_mbps.toFixed(1)} MB/s`;
-        document.getElementById('ulSpeed').textContent = `${data.network_speed.upload_mbps.toFixed(1)} MB/s`;
+        document.getElementById('dlSpeed').textContent = `${data.network_speed.download_mbps.toFixed(1)} MiB/s`;
+        document.getElementById('ulSpeed').textContent = `${data.network_speed.upload_mbps.toFixed(1)} MiB/s`;
         netSL.push(data.network_speed.download_mbps);
       }
 
@@ -883,64 +900,121 @@
       fetchAll();
     }
 
-    // ---- DISK SIDEBAR ----
+    // ---- 侧栏调度：同一时刻只允许一个面板打开，Esc 关闭并把焦点还给触发卡片 ----
     let lastDiskData = null;
-
-    function openDiskSidebar() {
-      if (!lastDiskData) return;
-      renderSidebar(lastDiskData);
-      document.getElementById('diskSidebar').classList.add('active');
-      document.getElementById('sidebarOverlay').classList.add('active');
-    }
-
-    function closeDiskSidebar() {
-      document.getElementById('diskSidebar').classList.remove('active');
-      if (!document.getElementById('coreSidebar').classList.contains('active')) {
-        document.getElementById('sidebarOverlay').classList.remove('active');
-      }
-    }
-
-    // ---- CPU CORES SIDEBAR ----
     let lastCpuData = null;
 
-    function openCoreSidebar() {
-      if (!lastCpuData) return;
-      renderCoreSidebar(lastCpuData);
-      document.getElementById('coreSidebar').classList.add('active');
+    const PANELS = {
+      disk: {
+        sidebar: 'diskSidebar',
+        onOpen() { if (!lastDiskData) return false; renderSidebar(lastDiskData); return true; },
+      },
+      cores: {
+        sidebar: 'coreSidebar',
+        onOpen() { if (!lastCpuData) return false; renderCoreSidebar(lastCpuData); return true; },
+      },
+      memory: {
+        sidebar: 'memSidebar',
+        onOpen() {
+          fetchProcesses();
+          clearInterval(memSidebarIntervalId);
+          memSidebarIntervalId = setInterval(fetchProcesses, REFRESH_MS);
+          return true;
+        },
+      },
+      network: {
+        sidebar: 'netSidebar',
+        onOpen() { loadNetworkDetails(); return true; },
+      },
+    };
+    let activePanel = null;
+    let panelTrigger = null;
+
+    function openPanel(name, trigger) {
+      const panel = PANELS[name];
+      if (!panel || activePanel === name) return;
+      closeAllPanels({ restoreFocus: false });
+      if (panel.onOpen() === false) return;   // 例如首轮数据未到，点了也不该弹空面板
+      const el = document.getElementById(panel.sidebar);
+      el.classList.add('active');
+      el.setAttribute('aria-hidden', 'false');
       document.getElementById('sidebarOverlay').classList.add('active');
+      activePanel = name;
+      panelTrigger = trigger || null;
+      const closeBtn = el.querySelector('.sidebar-close');
+      if (closeBtn) closeBtn.focus();
     }
 
-    function closeCoreSidebar() {
-      document.getElementById('coreSidebar').classList.remove('active');
-      if (!document.getElementById('diskSidebar').classList.contains('active')) {
-        document.getElementById('sidebarOverlay').classList.remove('active');
+    function closeAllPanels(options = {}) {
+      const restoreFocus = options.restoreFocus !== false;
+      Object.values(PANELS).forEach((panel) => {
+        const el = document.getElementById(panel.sidebar);
+        if (!el) return;
+        el.classList.remove('active');
+        el.setAttribute('aria-hidden', 'true');
+      });
+      if (memSidebarIntervalId) {
+        clearInterval(memSidebarIntervalId);
+        memSidebarIntervalId = null;
       }
+      document.getElementById('sidebarOverlay').classList.remove('active');
+      const hadPanel = activePanel !== null;
+      activePanel = null;
+      if (hadPanel && restoreFocus && panelTrigger && document.contains(panelTrigger)) {
+        panelTrigger.focus();
+      }
+      panelTrigger = null;
     }
 
-    // Close both sidebars on overlay click
-    document.getElementById('sidebarOverlay').addEventListener('click', () => {
-      closeDiskSidebar();
-      closeCoreSidebar();
-      closeMemSidebar();
-      closeNetSidebar();
+    // 卡片：鼠标点击与键盘 Enter/Space 都能打开
+    document.querySelectorAll('[data-panel]').forEach((card) => {
+      card.addEventListener('click', () => openPanel(card.dataset.panel, card));
+      card.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        openPanel(card.dataset.panel, card);
+      });
     });
 
+    // 面板内 Tab 循环，Esc 关闭
+    document.querySelectorAll('.sidebar').forEach((sidebar) => {
+      sidebar.addEventListener('keydown', (event) => {
+        if (event.key !== 'Tab') return;
+        const focusables = sidebar.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && activePanel) closeAllPanels();
+    });
+
+    document.getElementById('sidebarOverlay').addEventListener('click', () => closeAllPanels());
+
+    // 兼容 hash 深链与工具栏里的内联调用
+    function openDiskSidebar() { openPanel('disk'); }
+    function closeDiskSidebar() { if (activePanel === 'disk') closeAllPanels(); }
+    function openCoreSidebar() { openPanel('cores'); }
+    function closeCoreSidebar() { if (activePanel === 'cores') closeAllPanels(); }
+    function openMemSidebar() { openPanel('memory'); }
+    function closeMemSidebar() { if (activePanel === 'memory') closeAllPanels(); }
+    function openNetSidebar() { openPanel('network'); }
+    function closeNetSidebar() { if (activePanel === 'network') closeAllPanels(); }
+
     // ---- NETWORK SIDEBAR（网卡详情） ----
-    async function openNetSidebar() {
-      document.getElementById('netSidebar').classList.add('active');
-      document.getElementById('sidebarOverlay').classList.add('active');
+    async function loadNetworkDetails() {
       try {
         const resp = await apiFetch('/api/network');
         if (resp.ok) renderNetSidebar(await resp.json());
       } catch { /* 取不到就保持空列表 */ }
-    }
-
-    function closeNetSidebar() {
-      document.getElementById('netSidebar').classList.remove('active');
-      const others = ['diskSidebar', 'coreSidebar', 'memSidebar'];
-      if (!others.some(id => document.getElementById(id).classList.contains('active'))) {
-        document.getElementById('sidebarOverlay').classList.remove('active');
-      }
     }
 
     function renderNetSidebar(data) {
@@ -985,26 +1059,6 @@
     let memSidebarIntervalId = null;
     let memSortKey = 'memory';
     let memMetric = 'private';   // private=专用（≈系统进程管理器）, working=工作集
-
-    function openMemSidebar() {
-      document.getElementById('memSidebar').classList.add('active');
-      document.getElementById('sidebarOverlay').classList.add('active');
-      fetchProcesses();
-      clearInterval(memSidebarIntervalId);
-      memSidebarIntervalId = setInterval(fetchProcesses, REFRESH_MS);
-    }
-
-    function closeMemSidebar() {
-      document.getElementById('memSidebar').classList.remove('active');
-      if (memSidebarIntervalId) {
-        clearInterval(memSidebarIntervalId);
-        memSidebarIntervalId = null;
-      }
-      const others = ['diskSidebar', 'coreSidebar'];
-      if (!others.some(id => document.getElementById(id).classList.contains('active'))) {
-        document.getElementById('sidebarOverlay').classList.remove('active');
-      }
-    }
 
     function setMemSort(key) {
       memSortKey = key;
