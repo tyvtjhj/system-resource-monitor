@@ -1,0 +1,39 @@
+LibreHardwareMonitorLib — 第三方组件说明
+==========================================
+
+本目录存放 LibreHardwareMonitor 的 .NET 库，供 lhm_temp.ps1 读取 CPU 内核级温度
+（CPU Package / Core Max）。程序不再依赖 FanControl 的安装目录。
+
+文件来源
+--------
+LibreHardwareMonitorLib.dll 及其依赖取自本机 FanControl 安装目录，FanControl 打包的
+是官方 LibreHardwareMonitor 构建：
+
+    文件版本     0.9.6.0
+    产品版本     0.9.6+6be33b64e6b37cc3e68c334312657e06fe3385f3
+    数字签名     有效（CN=Rémi Mercier, O=Rémi Mercier, Québec, CA）
+    SHA-256      DAB76F326B3D72330615D15255F58A7945375C2DA8A8565A6B343A6C71801BF6
+
+随附依赖：
+    HidSharp.dll                                 (Apache-2.0)
+    System.Buffers.dll / System.Memory.dll        (MIT)
+    System.Numerics.Vectors.dll                   (MIT)
+    System.Runtime.CompilerServices.Unsafe.dll    (MIT)
+    System.Threading.Tasks.Extensions.dll         (MIT)
+    System.Management.dll                         (MIT)
+    System.Drawing.Common.dll                     (MIT)
+
+许可
+----
+LibreHardwareMonitor 采用 Mozilla Public License 2.0（MPL-2.0）。
+上游源码：https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+许可证全文：https://www.mozilla.org/en-US/MPL/2.0/
+
+按 MPL-2.0，可以随程序分发该二进制；如需自行构建或替换，请使用官方发行版，
+或用环境变量 MONITOR_LHM_DLL 指向你自己的 LibreHardwareMonitorLib.dll。
+
+运行条件
+--------
+1. 必须以管理员身份运行监控程序（读 MSR 需要内核驱动）。
+2. 系统中需要有 PawnIO 驱动（LibreHardwareMonitor 0.9.6 使用它）。
+   若未安装，库能加载但所有传感器读数恒为空，程序会自动回退到 ACPI 平台温度。

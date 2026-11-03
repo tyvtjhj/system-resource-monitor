@@ -1,0 +1,21 @@
+# Python 虚拟环境与缓存
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# 可选适配器的 Node 工具链
+node_modules/
+plugin/adapters/vscode/out/
+*.vsix
+
+# 环境变量与本机配置（.env.example 会提交）
+.env
+
+# 系统缩略文件
+Thumbs.db
+.DS_Store
