@@ -7,10 +7,30 @@
     http://127.0.0.1:5678 ，不需要联网。
 
 二、运行前需要
-    1. Windows 10 / 11（仅支持 Windows）
+    1. Windows 10 / 11（本项目核心功能面向 Windows；Linux 见第九节）
     2. Python 3.10 或更高版本
        安装时务必勾选 "Add python.exe to PATH"
-    3. 首次运行前，安装依赖（在解压出来的目录里打开命令行）：
+    3. 安装依赖，两种方式二选一：
+
+       方式 A（推荐）：一键创建项目内虚拟环境并安装锁定依赖。
+       在解压出来的目录里打开 PowerShell 或 cmd，执行：
+
+           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1
+
+       脚本会找到 Python 3.10+、创建 .venv、安装 requirements.txt，
+       最后打印“环境就绪”。之后双击 run.bat 启动即可（run.bat 会优先用 .venv）。
+       以后随时可以自检环境：
+
+           .venv\Scripts\python.exe scripts\doctor.py
+
+       （若脚本卡在“升级 pip”，改用：
+           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1 -SkipPipUpgrade
+         沙箱/代理受限环境可先执行：
+           set PIP_NO_CACHE_DIR=1
+           set PIP_DISABLE_PIP_VERSION_CHECK=1
+       然后再运行脚本。）
+
+       方式 B（旧习惯，仍然可用）：直接装到 py -3.10 解释器
 
            py -3.10 -m pip install -r requirements.txt
 
@@ -20,6 +40,8 @@
 
 三、启动
     1. 双击 run.bat
+       （run.bat 会优先使用项目 .venv，其次 py -3.10，再回退 python；
+         也可以继续用  py -3.10 server.py  的老方式启动）
     2. 弹出用户账户控制（UAC）窗口时点“是”
        读取 CPU 核心温度需要管理员权限。不点“是”也能用，
        只是 CPU 温度会显示为 ACPI 平台温度（比实际核心温度低不少）。
@@ -75,14 +97,47 @@
     lhm_temp.ps1         读取 CPU 核心温度的子进程脚本
     vendor\lhm\          LibreHardwareMonitor 库及其依赖
                          （MPL-2.0 许可，来源与校验值见其中的 NOTICE.txt）
-    run.bat              普通启动（会自动请求管理员权限）
+    pyproject.toml       项目元数据与依赖声明
+    requirements.in      直接依赖清单（锁文件的输入）
+    requirements.txt     锁定版本的依赖清单（安装入口）
+    requirements-dev.in/.txt  开发依赖（测试/静态检查用，普通用户不用管）
+    scripts/             维护脚本：bootstrap（一键装环境）、lock-deps（更新锁文件）、
+                         doctor（环境自检）
+    .env.example         环境变量示例（程序不会自动加载）
+    .venv/               项目虚拟环境（由 bootstrap 创建，不随压缩包分发）
+    run.bat              普通启动（会自动请求管理员权限，优先使用 .venv）
     run-admin.bat        强制以管理员身份启动
+    run.sh               Linux / macOS 启动脚本
     README.md            更详细的技术说明
-    requirements.txt     依赖清单
+    docs/                开发文档（架构、接口、任务书等）
 
-八、隐私与安全提醒
+八、在 Linux / macOS 上运行（可选）
+    完整功能以 Windows 为准；Linux 上当前支持基础指标（CPU、内存、分区、
+    网络速率、进程、系统信息），温度与显卡数据按平台能力降级。
+    1. 安装依赖（在项目目录执行）：
+           bash scripts/bootstrap.sh
+    2. 启动：
+           ./run.sh
+       或者直接：  .venv/bin/python server.py --no-elevate
+    3. 浏览器打开  http://127.0.0.1:5678/
+    4. 环境自检：
+           .venv/bin/python scripts/doctor.py
+    说明：Linux 上不会自动提权（不会调用 sudo）；读取部分传感器可能需要
+    sudo 或把用户加入相应用户组。
+
+九、隐私与安全提醒
     - 服务默认监听 0.0.0.0:5678，同一局域网内的其他人也能打开这个页面
       看到你的硬件信息和进程名。不需要时请按第六节第 4 条限制为本机访问。
     - 除页面字体会从 fonts.googleapis.com 拉取（离线时自动回退系统字体）之外，
       程序不会向外发送任何数据。
     - 程序以管理员权限运行，但只读取硬件信息，不修改系统设置。
+
+十、插件与嵌入（预留）
+    插件/嵌入组件属于后续版本（任务书 T3/T4/T5），当前版本尚未提供。
+    届时计划新增：
+        /plugin      集成中心页面（服务状态、配置生成、适配器说明）
+        /widget      可嵌入的缩略监控页
+        /embed.js    宿主页面注入脚本
+        /api/plugin/manifest  插件元数据
+    在插件就绪前，请直接打开  http://127.0.0.1:5678/  使用完整看板。
+    详见 README.md 的「插件接入（预留）」一节与 docs/开发执行任务书.md。

@@ -1,27 +1,28 @@
 @echo off
-rem Start the monitor. server.py requests Administrator rights by itself (UAC),
+rem Start the monitor.
+rem Interpreter order: project .venv -> py -3.10 -> py -3 -> python.
+rem server.py requests Administrator rights by itself (UAC) unless --no-elevate,
 rem because CPU package temperature needs the PawnIO driver.
-rem To skip elevation, run:  py -3.10 server.py --no-elevate
-rem The interpreter matters: PATH python may be 3.13 without flask/psutil,
-rem dependencies live in Python 3.10, so prefer py -3.10.
+rem Extra arguments are passed through, e.g.:  run.bat --no-elevate
 cd /d "%~dp0"
 
-where py >nul 2>nul
-if %errorlevel%==0 (
-    py -3.10 server.py
-    goto :end
+set "PY="
+if exist ".venv\Scripts\python.exe" set "PY=.venv\Scripts\python.exe"
+
+if not defined PY (
+    py -3.10 -c "import sys" >nul 2>nul
+    if not errorlevel 1 set "PY=py -3.10"
 )
-
-where python >nul 2>nul
-if %errorlevel%==0 (
-    python server.py
-    goto :end
+if not defined PY (
+    py -3 -c "import sys" >nul 2>nul
+    if not errorlevel 1 set "PY=py -3"
 )
+if not defined PY set "PY=python"
 
-echo [ERROR] Python not found. Install Python 3.10+ and add it to PATH.
-pause
-exit /b 1
+echo [run] python: %PY%
+%PY% server.py %*
+set "RC=%errorlevel%"
 
-:end
 rem If elevation succeeded, server.py exits 0 right away and this window closes.
-if %errorlevel% neq 0 pause
+if not "%RC%"=="0" pause
+exit /b %RC%

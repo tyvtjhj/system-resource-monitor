@@ -1,5 +1,7 @@
-# T1.2 直接依赖（与 pyproject.toml [project].dependencies 保持一致，不含 dev extras）
-# 锁文件生成：pip-compile --universal requirements.in -o requirements.txt
+# T1.2 direct dependencies (must match pyproject.toml [project].dependencies, no dev extras).
+# Lock file is generated with: pip-compile --universal requirements.in -o requirements.txt
+# Keep this file ASCII-only: pip/pip-tools decodes it with the system locale (GBK on zh-CN
+# Windows), so non-ASCII comments can raise UnicodeDecodeError before installation starts.
 flask>=3.0,<4
 psutil>=5.9,<8
 pynvml>=11.5,<14; sys_platform != "darwin"

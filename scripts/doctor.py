@@ -2,15 +2,17 @@
 """硬件资源监控 · 环境自检（T1.3）
 
 检查项：
-  1. Python 版本（>= 3.10）与解释器路径
-  2. 关键依赖的已安装版本
-  3. 当前平台
-  4. 服务端口占用情况
-  5. 若服务已在运行，请求 /api/start 并打印状态
+  1. 解释器归属：默认必须运行在项目 `.venv` 内（`--allow-system` 可放宽）
+  2. Python 版本（>= 3.10）与解释器路径
+  3. 关键依赖的已安装版本
+  4. 当前平台
+  5. 服务端口占用情况
+  6. 若服务已在运行，请求 /api/start 并打印状态
 
 用法：
   .venv/Scripts/python.exe scripts/doctor.py    # Windows
   .venv/bin/python scripts/doctor.py            # Linux / macOS
+  python scripts/doctor.py --allow-system       # 用系统解释器诊断，只告警不判失败
 
 只依赖标准库，可在未安装项目依赖的解释器上直接运行。
 环境变量：MONITOR_HOST / MONITOR_PORT / MONITOR_TOKEN（与 server.py 一致）。
@@ -18,6 +20,7 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.metadata as metadata
 import json
 import os
@@ -26,9 +29,12 @@ import socket
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 MIN_PYTHON = (3, 10)
 DEFAULT_PORT = 5678
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+EXPECTED_VENV = PROJECT_ROOT / ".venv"
 
 # (importlib.metadata 包名, 是否必需, 用途说明)
 PACKAGES = [
@@ -45,6 +51,20 @@ def _package_version(name: str) -> str | None:
         return metadata.version(name)
     except metadata.PackageNotFoundError:
         return None
+
+
+def _venv_state() -> tuple[bool, str]:
+    """返回 (当前解释器是否属于项目 .venv, 当前 sys.prefix)。"""
+    prefix = Path(sys.prefix)
+    try:
+        current = prefix.resolve()
+    except OSError:
+        current = prefix
+    try:
+        expected = EXPECTED_VENV.resolve()
+    except OSError:
+        expected = EXPECTED_VENV
+    return current == expected and EXPECTED_VENV.is_dir(), str(current)
 
 
 def _probe_host() -> str:
@@ -110,12 +130,40 @@ def _ensure_utf8_pipe() -> None:
             pass
 
 
-def main() -> int:
+def _report_venv(ok: bool, allow_system: bool) -> bool:
+    """检查解释器是否属于项目 .venv；返回更新后的 ok。"""
+    in_project_venv, prefix = _venv_state()
+    if in_project_venv:
+        print(f"解释器归属 : 项目 .venv（{prefix}）[OK]")
+        return ok
+    if allow_system:
+        print(f"解释器归属 : 非项目 .venv（sys.prefix={prefix}）[WARN] --allow-system 已放宽")
+        return ok
+    print(f"解释器归属 : 非项目 .venv（sys.prefix={prefix}）[FAIL]")
+    print("  -> 请用项目虚拟环境运行：")
+    print(r"     Windows    : .venv\Scripts\python.exe scripts\doctor.py")
+    print("     Linux/macOS: .venv/bin/python scripts/doctor.py")
+    print("     仅诊断系统解释器时加 --allow-system")
+    return False
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Hardware Monitor 环境自检")
+    parser.add_argument(
+        "--allow-system",
+        action="store_true",
+        help="允许在非项目 .venv 的解释器下运行（只告警，不判失败）",
+    )
+    args = parser.parse_args(argv)
+
     _ensure_utf8_pipe()
     _print_header()
     ok = True
 
-    # 1. Python
+    # 1. 解释器归属
+    ok = _report_venv(ok, args.allow_system)
+
+    # 2. Python 版本
     version = sys.version_info
     is_venv = sys.prefix != sys.base_prefix
     py_text = f"{version.major}.{version.minor}.{version.micro}"
@@ -126,14 +174,14 @@ def main() -> int:
         ok = False
     print(f"Python     : {py_text} ({'虚拟环境' if is_venv else '系统解释器'}) [{py_state}]")
     print(f"解释器     : {sys.executable}")
-    print(f"项目目录   : {os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}")
+    print(f"项目目录   : {PROJECT_ROOT}")
 
-    # 2. 平台
+    # 3. 平台
     print(f"平台       : {platform.system()} {platform.release()} ({platform.machine()})")
     if sys.platform == "win32":
         print(f"Windows    : {platform.version()}")
 
-    # 3. 依赖
+    # 4. 依赖
     print()
     print("关键依赖：")
     missing_required: list[str] = []
@@ -151,7 +199,7 @@ def main() -> int:
         print(f"  -> 缺少必需依赖: {', '.join(missing_required)}")
         print("     修复：pip install -r requirements.txt")
 
-    # 4. 端口与服务
+    # 5. 端口与服务
     port = _probe_port()
     host = _probe_host()
     print()
@@ -175,7 +223,7 @@ def main() -> int:
     else:
         print("服务状态   : 未运行（启动方式见 README / run.bat / run.sh）")
 
-    # 5. 结论
+    # 6. 结论
     print()
     print("-" * 60)
     if ok:

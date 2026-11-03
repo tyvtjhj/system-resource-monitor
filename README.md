@@ -5,14 +5,20 @@ Windows 本机的轻量硬件看板：Flask 采集 → JSON → 单页 HTML 仪�
 ## 目录结构
 
 ```
-server.py               Flask 后端 + 后台采样线程
+server.py               Flask 后端 + 后台采样线程（兼容入口；T2 后改为薄包装）
 monitor-mobile.html     主页面（服务根路径 / 返回它），带 GPU 引擎侧栏、手机自适应
 monitor.html            桌面版页面（/monitor.html），无 GPU 侧栏
 lhm_temp.ps1            子进程：加载 LibreHardwareMonitor 读 CPU 内核级温度
 vendor/lhm/             自带的 LibreHardwareMonitorLib（官方 0.9.6）+ 依赖 + 许可证说明
-requirements.txt        依赖清单
-run.bat                 启动脚本（优先用 py -3.10）
-backup/                 6 月的历史快照，不参与运行
+pyproject.toml          项目元数据与依赖声明
+requirements.in         直接依赖（锁文件输入）
+requirements.txt        跨平台锁文件（uv pip compile --universal 生成）
+requirements-dev.in/.txt 开发依赖（pytest / pytest-cov / ruff / pip-tools）
+scripts/                bootstrap、lock-deps、doctor 等维护脚本
+.env.example            环境变量示例（不会自动加载）
+run.bat / run-admin.bat Windows 启动脚本（优先 .venv）
+run.sh                  Linux / macOS 启动脚本
+docs/                   Code Wiki 与开发文档
 ```
 
 ## 运行
@@ -39,6 +45,47 @@ $env:MONITOR_NO_ELEVATE='1'; py -3.10 server.py
 浏览器打开 `http://127.0.0.1:5678/`；手机/局域网访问 `http://<本机IP>:5678/`。
 
 > 注意：PATH 上的 `python` 可能不是装了依赖的那个解释器，用 `py -3.10` 或 `run.bat` 最稳。
+
+## 可复制环境（T1）
+
+推荐用脚本一键创建项目内虚拟环境并安装锁定依赖：
+
+```powershell
+# Windows
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\bootstrap.ps1
+.\.venv\Scripts\python.exe scripts\doctor.py      # 环境自检
+```
+
+```bash
+# Linux / macOS
+bash scripts/bootstrap.sh
+.venv/bin/python scripts/doctor.py
+```
+
+- `run.bat` / `run-admin.bat` / `run.sh` 会**优先使用 `.venv`**，找不到时回退 `py -3.10`、`py -3` 或 `python3`；原有的 `py -3.10 server.py` 用法仍然可用。
+- `bootstrap` 默认升级 pip（部分代理环境会卡住），可加 `-SkipPipUpgrade`（Windows）或 `SKIP_PIP_UPGRADE=1`（Linux/macOS）跳过；`-Recreate` / `RECREATE=1` 可重建 `.venv`。
+- `scripts/doctor.py` 要求解释器属于项目 `.venv`（用系统解释器会以退出码 1 提示）；只诊断系统解释器时加 `--allow-system`。
+
+### 依赖锁文件维护
+
+- 直接依赖写在 `requirements.in` / `requirements-dev.in`（保持 ASCII，避免中文 Windows 的 GBK 解码问题）。
+- 锁文件由 `scripts/lock-deps.ps1`（Windows）或 `scripts/lock-deps.sh`（Linux/macOS）生成：`uv pip compile --universal --python-version 3.10 ...`，保留 `sys_platform` 平台 marker，Windows/Linux 共用同一份锁。
+- 说明：pip-tools 7.6.x 的 `pip-compile` **没有** `--universal` 选项（任务书假设与实际不符），因此脚本优先用 uv；无 uv 时回退 `pip-compile`，但只能锁当前平台并会打印警告。
+- 升级依赖的流程：改 `.in` → 运行锁脚本 → 检查 `git diff` → 提交 `requirements*.txt`。
+- 环境变量示例见 `.env.example`（程序不会自动加载）。
+- 沙箱/代理受限环境若 pip 卡住，可先设 `PIP_NO_CACHE_DIR=1`、`PIP_DISABLE_PIP_VERSION_CHECK=1` 再执行。
+
+## 插件接入（预留）
+
+插件与嵌入组件属于任务书 T3/T4/T5 的范围，**尚未实现**；规划中的入口如下（实现后会在本节补充用法）：
+
+- `GET /plugin`：集成中心页面（服务状态、配置生成、适配器说明）。
+- `GET /widget`：可 iframe 嵌入的缩略监控页。
+- `GET /embed.js`：宿主页面注入脚本（Shadow DOM + iframe + `postMessage` 握手）。
+- `GET /api/plugin/manifest`：插件元数据（版本、能力表、鉴权方式）。
+- 页面脚本计划支持 `?api=<base-url>` 指定后端地址，便于反向代理/远程开发。
+
+在此之前，最稳妥的集成方式仍是直接打开本机 `http://127.0.0.1:5678/`。
 
 ## 配置（环境变量）
 
