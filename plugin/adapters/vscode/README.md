@@ -4,7 +4,7 @@
 
 - **状态栏**：显示 `CPU xx% · MEM xx%`（每 `refreshInterval` 刷新，点击打开完整面板）；
 - **侧边栏 WebviewView**：加载服务端 `widget-core.js` + `widget.css` 渲染缩略组件；
-- **命令**：`hardwareMonitor.openDashboard`（外部浏览器打开 `/`）、`hardwareMonitor.toggleWidget`、`hardwareMonitor.refresh`；
+- **命令**：`hardwareMonitor.openDashboard`（外部浏览器打开完整面板；配置了 token 时会带上 `?token=`，否则启用 `MONITOR_TOKEN` 后页面会一直 401/离线）、`hardwareMonitor.toggleWidget`（真正显示/隐藏侧边栏）、`hardwareMonitor.refresh`；
 - **配置**：`hardwareMonitor.baseUrl`、`hardwareMonitor.token`、`hardwareMonitor.refreshInterval`。
 
 ## 明确的能力边界

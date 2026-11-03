@@ -23,12 +23,16 @@
 
   var script = document.currentScript;
   var overrides = window.DSH_HARDWARE_MONITOR_CONFIG || {};
+  var configuredUrl = window.DSH_HARDWARE_MONITOR_CONFIG_URL || '';
 
   function configUrl() {
+    // 优先显式配置；否则按脚本自身位置解析同目录 adapter.config.json。
+    // 控制台 / eval 注入时 document.currentScript 为 null，此时必须用显式配置。
+    if (configuredUrl) return configuredUrl;
     try {
       if (script && script.src) return new URL('adapter.config.json', script.src).toString();
     } catch (err) { /* ignore */ }
-    return 'adapter.config.json';
+    return '';
   }
 
   function loadConfig(done) {
@@ -39,15 +43,27 @@
       settled = true;
       done(Object.assign({}, config, overrides));
     }
+    var url = configUrl();
+    if (!url) {
+      console.warn('[hardware-monitor] 无法定位 adapter.config.json（document.currentScript 不可用）。' +
+        '请设置 window.DSH_HARDWARE_MONITOR_CONFIG 或在注入前设置 ' +
+        'window.DSH_HARDWARE_MONITOR_CONFIG_URL。');
+      finish(merged);
+      return;
+    }
     try {
-      fetch(configUrl(), { cache: 'no-store' })
+      fetch(url, { cache: 'no-store' })
         .then(function (resp) {
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
           return resp.json();
         })
         .then(function (fileConfig) { finish(Object.assign({}, merged, fileConfig)); })
-        .catch(function () { finish(merged); });
+        .catch(function (err) {
+          console.warn('[hardware-monitor] 读取 adapter.config.json 失败，使用默认/页面覆盖配置: ' + err);
+          finish(merged);
+        });
     } catch (err) {
+      console.warn('[hardware-monitor] 读取配置异常，使用默认配置: ' + err);
       finish(merged);
     }
   }

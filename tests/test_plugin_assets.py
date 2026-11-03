@@ -75,14 +75,36 @@ def test_manifest_fields(client):
     assert isinstance(manifest["platform"]["capabilities"], dict)
 
 
+def test_adapter_assets_are_served(client):
+    config_resp = client.get("/plugin/adapters/dsh/adapter.config.json")
+    assert config_resp.status_code == 200
+    assert "application/json" in config_resp.headers["Content-Type"]
+    assert "targetSelector" in config_resp.get_json()
+
+    inject = client.get("/plugin/adapters/dsh/inject.js")
+    assert inject.status_code == 200
+    assert "application/javascript" in inject.headers["Content-Type"]
+    assert "HardwareMonitor" in inject.get_data(as_text=True)
+
+    userscript = client.get("/plugin/adapters/userscript/hardware-monitor.user.js")
+    assert userscript.status_code == 200
+    assert "application/javascript" in userscript.headers["Content-Type"]
+
+
+def test_adapter_route_blocks_traversal(client):
+    resp = client.get("/plugin/adapters/%2e%2e%2f%2e%2e%2fserver.py")
+    assert resp.status_code in (400, 404)
+
+
 def test_manifest_requires_token_when_configured(monkeypatch, client):
     monkeypatch.setattr(config, "TOKEN", "s3cret")
 
     assert client.get("/api/plugin/manifest").status_code == 401
     ok = client.get("/api/plugin/manifest", headers={"X-Monitor-Token": "s3cret"})
     assert ok.status_code == 200
-    # 插件静态资源不受 token 保护（iframe 页面需要能被嵌入）
+    # 插件静态资源/适配器源文件不受 token 保护（iframe 与宿主加载需要）
     assert client.get("/embed.js").status_code == 200
+    assert client.get("/plugin/adapters/dsh/adapter.config.json").status_code == 200
 
 
 def test_widget_html_does_not_embed_token(client):

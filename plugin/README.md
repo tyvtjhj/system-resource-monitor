@@ -48,6 +48,19 @@ plugin/
 - 外部 https 宿主需配置服务端 `MONITOR_FRAME_ANCESTORS` 允许该来源，否则 `/widget` 会被 CSP 拒绝嵌入。
 - 集成中心 `/plugin` 可直接生成上面的片段。
 
+## 从服务地址加载适配器
+
+适配器源文件通过服务直接提供，便于 DSH 等宿主按 URL 注入：
+
+- `GET /plugin/adapters/dsh/inject.js`（同目录 `adapter.config.json` 可相对 fetch）
+- `GET /plugin/adapters/dsh/adapter.config.json`
+- `GET /plugin/adapters/userscript/hardware-monitor.user.js`
+- `GET /plugin/adapters/vscode/...`（含 README、源码；`node_modules`/`out` 不提供）
+
+示例：在 DSH 页面注入 `http://127.0.0.1:5678/plugin/adapters/dsh/inject.js` 即可；
+配置默认取同目录 `adapter.config.json`，也可在注入前设置 `window.DSH_HARDWARE_MONITOR_CONFIG`
+或 `window.DSH_HARDWARE_MONITOR_CONFIG_URL` 覆盖。
+
 ## 安全建议
 
 1. 插件场景设置 `MONITOR_HOST=127.0.0.1`，并启用 `MONITOR_TOKEN`。

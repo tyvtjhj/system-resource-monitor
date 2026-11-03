@@ -10,6 +10,7 @@
 // @grant        GM_registerMenuCommand
 // @connect      127.0.0.1
 // @connect      localhost
+// @connect      *
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -215,6 +216,8 @@
   }
 
   function poll() {
+    if (!running) return;
+    if (document.hidden) { schedule(DEFAULTS.refreshMs); return; }
     gmGet(config.baseUrl.replace(/\/+$/, '') + '/api/all',
       config.token ? { 'X-Monitor-Token': config.token } : {})
       .then(function (data) {
@@ -278,13 +281,34 @@
 
     loadCore().then(function (ok) {
       if (ok && window.HardwareMonitorWidget) {
+        var html = document.documentElement;
+        var previousTheme = html.getAttribute('data-theme');
+        var previousEffective = html.getAttribute('data-effective-theme');
         widget = window.HardwareMonitorWidget.mount(rootEl, { theme: config.theme });
+        // widget-core 会把主题写到宿主 <html>；用户脚本里必须还原，避免改变宿主站点主题
+        if (previousTheme === null) html.removeAttribute('data-theme');
+        else html.setAttribute('data-theme', previousTheme);
+        if (previousEffective === null) html.removeAttribute('data-effective-theme');
+        else html.setAttribute('data-effective-theme', previousEffective);
       }
       poll();
     });
 
+    if (window.matchMedia) {
+      var scheme = window.matchMedia('(prefers-color-scheme: dark)');
+      var onSchemeChange = function () { applyTheme(); };
+      if (scheme.addEventListener) scheme.addEventListener('change', onSchemeChange);
+      else if (scheme.addListener) scheme.addListener(onSchemeChange);
+    }
+
     document.addEventListener('visibilitychange', function () {
-      if (!document.hidden && running) poll();
+      if (document.hidden) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        return;
+      }
+      if (!running) return;
+      if (timer) { clearTimeout(timer); timer = null; }
+      poll();
     });
     registerMenus();
   }

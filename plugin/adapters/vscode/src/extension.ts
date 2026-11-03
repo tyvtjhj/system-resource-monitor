@@ -18,8 +18,13 @@ interface AdapterConfig {
   refreshInterval: number;
 }
 
+const FETCH_TIMEOUT_MS = 4000;
+const VIEW_ID = 'hardwareMonitor.widget';
+
 let statusBar: vscode.StatusBarItem | undefined;
-let timer: ReturnType<typeof setInterval> | undefined;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let refreshing = false;
+let disposed = false;
 let latest: Snapshot | null = null;
 let widgetProvider: WidgetViewProvider | undefined;
 
@@ -31,16 +36,31 @@ function readConfig(): AdapterConfig {
   return { baseUrl, token, refreshInterval };
 }
 
+function dashboardUri(): vscode.Uri {
+  const { baseUrl, token } = readConfig();
+  // 页面只从 URL 读 token；启用 MONITOR_TOKEN 时，不带 token 打开面板会一直 401/离线。
+  // 这是与既有页面（?token=）兼容的最小改动；token 仅出现在外部浏览器地址栏。
+  if (!token) return vscode.Uri.parse(`${baseUrl}/`);
+  return vscode.Uri.parse(`${baseUrl}/?token=${encodeURIComponent(token)}`);
+}
+
 async function fetchSnapshot(): Promise<Snapshot | null> {
   const { baseUrl, token } = readConfig();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const headers: Record<string, string> = {};
     if (token) headers['X-Monitor-Token'] = token;
-    const response = await fetch(`${baseUrl}/api/all`, { headers });
+    const response = await fetch(`${baseUrl}/api/all`, {
+      headers,
+      signal: controller.signal,
+    });
     if (!response.ok) return null;
     return (await response.json()) as Snapshot;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -53,7 +73,7 @@ function updateStatusBar(data: Snapshot | null): void {
   if (!statusBar) return;
   if (!data) {
     statusBar.text = '$(pulse) HM --';
-    statusBar.tooltip = 'Hardware Monitor: 服务不可用（检查 hardwareMonitor.baseUrl）';
+    statusBar.tooltip = 'Hardware Monitor: 服务不可用（检查 hardwareMonitor.baseUrl / token）';
     return;
   }
   const cpu = numberOf((data.cpu || {}).usage);
@@ -63,28 +83,51 @@ function updateStatusBar(data: Snapshot | null): void {
 }
 
 async function refresh(): Promise<void> {
-  const data = await fetchSnapshot();
-  latest = data;
-  updateStatusBar(data);
-  widgetProvider?.post({ type: data ? 'data' : 'offline', data: data ?? undefined });
+  if (refreshing || disposed) return;
+  refreshing = true;
+  try {
+    const data = await fetchSnapshot();
+    latest = data;
+    updateStatusBar(data);
+    widgetProvider?.post({ type: data ? 'data' : 'offline', data: data ?? undefined });
+  } finally {
+    refreshing = false;
+  }
+}
+
+function scheduleNext(): void {
+  if (disposed) return;
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    void refresh().then(scheduleNext, scheduleNext);
+  }, readConfig().refreshInterval);
 }
 
 function restart(): void {
-  if (timer) clearInterval(timer);
-  void refresh();
-  timer = setInterval(() => { void refresh(); }, readConfig().refreshInterval);
+  if (refreshTimer) clearTimeout(refreshTimer);
+  void refresh().then(scheduleNext, scheduleNext);
 }
 
 class WidgetViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
+  private visible = false;
+
+  public get isVisible(): boolean {
+    return this.visible;
+  }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    this.visible = view.visible;
     view.webview.options = { enableScripts: true };
     view.webview.onDidReceiveMessage((message: { type?: string }) => {
       if (message && message.type === 'ready' && latest) {
         this.post({ type: 'data', data: latest });
       }
+    });
+    view.onDidChangeVisibility(() => {
+      this.visible = view.visible;
+      if (view.visible && latest) this.post({ type: 'data', data: latest });
     });
     void this.render(view.webview);
   }
@@ -159,22 +202,35 @@ export function activate(context: vscode.ExtensionContext): void {
 
   widgetProvider = new WidgetViewProvider();
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('hardwareMonitor.widget', widgetProvider, {
+    vscode.window.registerWebviewViewProvider(VIEW_ID, widgetProvider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('hardwareMonitor.openDashboard', () => {
-      void vscode.env.openExternal(vscode.Uri.parse(`${readConfig().baseUrl}/`));
+      void vscode.env.openExternal(dashboardUri());
     }),
   );
   context.subscriptions.push(
     vscode.commands.registerCommand('hardwareMonitor.refresh', () => { void refresh(); }),
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('hardwareMonitor.toggleWidget', () => {
-      void vscode.commands.executeCommand('workbench.view.extension.hardwareMonitor');
+    vscode.commands.registerCommand('hardwareMonitor.toggleWidget', async () => {
+      // 真正的显示/隐藏：优先用视图级 toggle；旧版本不支持时回退到聚焦侧边栏
+      try {
+        if (widgetProvider?.isVisible) {
+          await vscode.commands.executeCommand('workbench.action.toggleViewVisibility', VIEW_ID);
+        } else {
+          await vscode.commands.executeCommand('workbench.view.extension.hardwareMonitor');
+        }
+      } catch {
+        try {
+          await vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
+        } catch {
+          await vscode.commands.executeCommand('workbench.view.extension.hardwareMonitor');
+        }
+      }
     }),
   );
   context.subscriptions.push(
@@ -187,6 +243,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  if (timer) clearInterval(timer);
-  timer = undefined;
+  disposed = true;
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = undefined;
 }

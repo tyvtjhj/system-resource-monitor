@@ -12,7 +12,7 @@ import os
 import threading
 import time
 
-from flask import Flask, abort, jsonify, request, send_file
+from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
 from . import __version__, config
 from . import platform as platform_info
@@ -139,6 +139,22 @@ def create_app():
     @app.route("/embed.js")
     def embed_js():
         return _serve_plugin_asset("embed.js", "application/javascript")
+
+    @app.route("/plugin/adapters/<path:filename>")
+    def plugin_adapter_asset(filename):
+        """插件适配器源文件（inject.js / adapter.config.json / 用户脚本 / 扩展 README）。
+
+        用于 DSH 等宿主直接从服务地址加载适配器；Flask 的 safe_join 会拒绝路径穿越。
+        """
+        directory = os.path.join(config.PLUGIN_DIR, "adapters")
+        resp = send_from_directory(directory, filename)
+        resp.headers["Cache-Control"] = "no-cache"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        if filename.endswith(".js"):
+            resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        elif filename.endswith(".json"):
+            resp.headers["Content-Type"] = "application/json; charset=utf-8"
+        return resp
 
     # ---------------- 全量 / 单指标 ----------------
     @app.route("/api/all")
