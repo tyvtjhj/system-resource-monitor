@@ -6,6 +6,7 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+pytest-of-*/
 .ruff_cache/
 
 # 可选适配器的 Node 工具链

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import socket
 from typing import Any, Callable
 
@@ -25,6 +26,7 @@ __all__ = [
     "request_elevation",
     "subprocess_flags",
     "physical_disks",
+    "parent_device",
     "network_details",
     "temperature_sources",
     "integrated_gpu",
@@ -40,6 +42,14 @@ RESOLV_CONF = "/etc/resolv.conf"
 
 # /sys/block 下这些前缀是虚拟 / 可移除设备，不算物理硬盘
 _VIRTUAL_DISK_PREFIXES = ("loop", "ram", "dm-", "sr", "zram")
+
+# 分区设备名 -> 父设备 的匹配规则（任务书 T2.4）：
+#   nvme0n1p1 -> nvme0n1 / mmcblk0p1 -> mmcblk0 / sda1 -> sda
+_PARTITION_PATTERNS = (
+    re.compile(r"^(nvme\d+n\d+)p\d+$"),
+    re.compile(r"^(mmcblk\d+)p\d+$"),
+    re.compile(r"^([a-z]+)\d+$"),
+)
 
 # CPU 温度合理区间（摄氏度）：过滤 0、负值与明显越界的脏读数
 _MIN_TEMP = 5.0
@@ -157,6 +167,7 @@ def physical_disks() -> list[dict]:
             rotational = _read_int(os.path.join(base, "queue", "rotational"))
             size_gb = round(sectors * 512 / 1024 ** 3, 1) if sectors and sectors > 0 else None
             disks.append({
+                "device": f"/dev/{name}",
                 "model": model,
                 "interface_type": _disk_interface(name),
                 "size_gb": size_gb,
@@ -167,6 +178,24 @@ def physical_disks() -> list[dict]:
         except OSError:
             continue
     return disks
+
+
+def parent_device(device: str) -> str | None:
+    """把分区设备名映射到父设备名（任务书 T2.4）。
+
+    支持 "/dev/nvme0n1p1"、"nvme0n1p1"、"sda1" 等写法；传入整盘设备
+    （如 "/dev/sda"）或无法识别时返回 None，便于调用方判断。
+    """
+    if not device:
+        return None
+    name = os.path.basename(str(device).rstrip("/"))
+    if not name:
+        return None
+    for pattern in _PARTITION_PATTERNS:
+        match = pattern.match(name)
+        if match:
+            return f"/dev/{match.group(1)}"
+    return None
 
 
 # ---------------- 网卡详情 ----------------
@@ -322,7 +351,6 @@ def _thermal_cpu_temp() -> dict | None:
     except Exception:  # noqa: BLE001
         return None
 
-    fallback: dict | None = None
     for temp_path in temp_paths:
         milli = _read_int(temp_path)
         if milli is None:
@@ -332,13 +360,11 @@ def _thermal_cpu_temp() -> dict | None:
             continue
         zone_dir = os.path.dirname(temp_path)
         zone_type = _read_text(os.path.join(zone_dir, "type")) or os.path.basename(zone_dir)
-        payload = _temp_payload(f"CPU ({zone_type})", value, "thermal")
+        # 只接受 CPU 相关的热区；acpitz/nvme 等平台热区不能冒充 CPU 温度，
+        # 没有匹配时返回 None（任务书 T2.4：都没有返回 None）。
         if any(key in zone_type.lower() for key in _CPU_THERMAL_KEYWORDS):
-            return payload
-        if fallback is None:
-            # 非 CPU 明确命名的热区作为兜底（仍限制在合理温度区间）
-            fallback = payload
-    return fallback
+            return _temp_payload(f"CPU ({zone_type})", value, "thermal")
+    return None
 
 
 def temperature_sources() -> list[Callable[[], dict | None]]:
