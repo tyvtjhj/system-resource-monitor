@@ -549,7 +549,9 @@
   <script>
     // 同源优先：页面由本服务提供时直接用当前 origin（反向代理 / 非 5678 端口 / HTTPS 都能工作）；
     // 也可用 ?api=http://host:port 显式指定后端；file:// 打开时回退本机默认地址。
-    const API_BASE = new URLSearchParams(location.search).get('api')
+    // 归一化 ?api=：去掉末尾斜杠，避免 `http://host:5678/` 拼成 `//api/all` 被 Flask 判 404
+    const apiParam = (new URLSearchParams(location.search).get('api') || '').trim().replace(/\/+$/, '');
+    const API_BASE = apiParam
       || (location.protocol === 'file:' ? 'http://127.0.0.1:5678' : location.origin);
     // 服务端设置了 MONITOR_TOKEN 时，从页面 URL 的 ?token= 带过来
     const TOKEN = new URLSearchParams(location.search).get('token') || '';
@@ -738,15 +740,18 @@
       const gpuNvidiaAvailable = platformCaps.gpu_nvidia !== false;
       const igpuSupported = platformCaps.gpu_integrated !== false;
 
-      // gpu_nvidia=false 时隐藏 GPU 侧栏入口（卡片不再可点）
+      // gpu_nvidia=false 时 GPU 侧栏入口“不显示”：卡片本身就是入口，整卡隐藏
       const gpuCard = document.getElementById('gpuCard');
       if (gpuCard) {
         if (!gpuNvidiaAvailable) {
           gpuCard.onclick = null;
-          gpuCard.style.cursor = 'default';
+          gpuCard.style.display = 'none';
           gpuCard.title = '当前平台不可用';
+          const gpuSidebar = document.getElementById('gpuSidebar');
+          if (gpuSidebar && gpuSidebar.classList.contains('active')) closeGpuSidebar();
         } else {
           gpuCard.onclick = () => openGpuSidebar();
+          gpuCard.style.display = '';
           gpuCard.style.cursor = 'pointer';
           gpuCard.title = '';
         }

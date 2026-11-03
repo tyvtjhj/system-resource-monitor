@@ -525,7 +525,9 @@
   <script>
     // 同源优先：页面由本服务提供时直接用当前 origin（反向代理 / 非 5678 端口 / HTTPS 都能工作）；
     // 也可用 ?api=http://host:port 显式指定后端；file:// 打开时回退本机默认地址。
-    const API_BASE = new URLSearchParams(location.search).get('api')
+    // 归一化 ?api=：去掉末尾斜杠，避免 `http://host:5678/` 拼成 `//api/all` 被 Flask 判 404
+    const apiParam = (new URLSearchParams(location.search).get('api') || '').trim().replace(/\/+$/, '');
+    const API_BASE = apiParam
       || (location.protocol === 'file:' ? 'http://127.0.0.1:5678' : location.origin);
     // 服务端设置了 MONITOR_TOKEN 时，从页面 URL 的 ?token= 带过来
     const TOKEN = new URLSearchParams(location.search).get('token') || '';
