@@ -91,6 +91,28 @@ def test_adapter_assets_are_served(client):
     assert "application/javascript" in userscript.headers["Content-Type"]
 
 
+def test_dsh_native_plugin_assets(client):
+    pkg = client.get("/plugin/adapters/dsh/package.json")
+    assert pkg.status_code == 200
+    manifest = pkg.get_json()
+    assert manifest["name"] == "dsh-hardware-monitor"
+    assert manifest["dsh"]["client"]["platform"] == "web"
+    assert manifest["dsh"]["bundle"]["patch"] == "./cordis.patch.yml"
+
+    client_js = client.get("/plugin/adapters/dsh/client.js")
+    assert client_js.status_code == 200
+    assert "application/javascript" in client_js.headers["Content-Type"]
+    assert "__ModuleLoader__" in client_js.get_data(as_text=True)
+
+    host_js = client.get("/plugin/adapters/dsh/lib/index.js")
+    assert host_js.status_code == 200
+    assert "hardware_monitor_status" in host_js.get_data(as_text=True)
+
+    skill = client.get("/plugin/adapters/dsh/SKILL.md")
+    assert skill.status_code == 200
+    assert "hardware_monitor_status" in skill.get_data(as_text=True)
+
+
 def test_adapter_route_blocks_traversal(client):
     resp = client.get("/plugin/adapters/%2e%2e%2f%2e%2e%2fserver.py")
     assert resp.status_code in (400, 404)

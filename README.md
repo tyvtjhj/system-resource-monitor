@@ -84,17 +84,23 @@ bash scripts/bootstrap.sh
 - 沙箱/代理受限环境若 pip 卡住，可先设 `PIP_NO_CACHE_DIR=1`、`PIP_DISABLE_PIP_VERSION_CHECK=1` 再执行。
 - 锁脚本的临时文件（`requirements*.txt.tmp*`）已加入 `.gitignore`；脚本正常结束会清理，中断残留会在下次运行或下次手工执行时自动移除。
 
-## 插件接入（预留）
+## 插件接入
 
-插件与嵌入组件属于任务书 T3/T4/T5 的范围，**尚未实现**；规划中的入口如下（实现后会在本节补充用法）：
+插件与缩略组件已实现（T4/T5），入口如下：
 
-- `GET /plugin`：集成中心页面（服务状态、配置生成、适配器说明）。
-- `GET /widget`：可 iframe 嵌入的缩略监控页。
-- `GET /embed.js`：宿主页面注入脚本（Shadow DOM + iframe + `postMessage` 握手）。
+- `GET /plugin`：集成中心（服务状态、缩略预览、配置片段生成、宿主能力矩阵）。
+- `GET /widget`：可 iframe 嵌入的缩略监控页；`GET /embed.js`：宿主注入脚本（Shadow DOM + iframe + `postMessage` 握手，token 不进 URL）。
 - `GET /api/plugin/manifest`：插件元数据（版本、能力表、鉴权方式）。
-- 页面脚本计划支持 `?api=<base-url>` 指定后端地址，便于反向代理/远程开发。
+- 宿主适配器在 `plugin/adapters/`：Web/DSH 注入、用户脚本、VS Code 系扩展、Codex 状态行，见 [plugin/README.md](plugin/README.md)。
 
-在此之前，最稳妥的集成方式仍是直接打开本机 `http://127.0.0.1:5678/`。
+**DSH 原生插件（推荐）**：`plugin/adapters/dsh/` 提供对话右上角挂件与 `hardware_monitor_status` 工具，
+运行 `powershell -ExecutionPolicy Bypass -File .\plugindapters\dsh\install.ps1` 安装，
+刷新 DSH 页面（Ctrl+R）后出现挂件。服务地址/Token 通过启动 DSH 前的
+`HARDWARE_MONITOR_URL` / `HARDWARE_MONITOR_TOKEN` 配置。
+
+页面脚本支持 `?api=<base-url>` 指定后端，便于反向代理/远程开发。
+
+如果不装插件，最稳妥的集成方式仍是直接打开本机 `http://127.0.0.1:5678/`。
 
 ## 配置（环境变量）
 

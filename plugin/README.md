@@ -7,7 +7,7 @@
 
 | 宿主 | 对话区左上角 | 完整页面 | 方案 |
 |---|---|---|---|
-| DSH / Web / Electron | 可配置（需宿主提供选择器） | 是 | `plugin/embed.js` + `data-target` |
+| DSH / Web / Electron | 可配置（需宿主提供选择器） | 是 | **DSH 原生插件（推荐）** / `embed.js` + `data-target` 回退 |
 | DeepSeek Web / Codex Web 等 HTTPS 页面 | 可配置 | 是 | 用户脚本 `userscript/hardware-monitor.user.js`（避开混合内容） |
 | Trae / Cursor / VS Code | **否**（内置聊天没有公开 DOM 注入 API） | 是 | 扩展侧边栏 / 面板 / 状态栏（`vscode/`） |
 | Codex CLI | 否 | 浏览器 | 状态行脚本（`codex/statusline.py`） |
@@ -25,8 +25,9 @@ plugin/
 ├── README.md                                               # 本文件
 └── adapters/
     ├── web/README.md                 # DSH / DeepSeek / Codex Web 通用接入
-    ├── dsh/adapter.config.json       # DSH 配置模板
-    ├── dsh/inject.js                 # 读取配置并加载 embed.js
+    ├── dsh/                          # DSH 原生插件（package.json/client.js/lib/install.ps1）
+    │   ├── adapter.config.json       # 仅 Web 注入回退使用
+    │   └── inject.js                 # 仅 Web 注入回退使用
     ├── userscript/hardware-monitor.user.js
     ├── codex/statusline.py
     └── vscode/                       # VS Code / Trae / Cursor 扩展骨架
