@@ -1,7 +1,7 @@
 /**
  * dsh-hardware-monitor 浏览器半（DSH UI 插件格式）。
  *
- * 在对话会话区右上角（conversation.session.header.corner）放一个常驻小挂件：
+ * 在输入框下方（conversation.composer.dock）放一个常驻小挂件（不再占用对话区右上角）：
  *   - 每 2 秒从 /hardware-monitor-api/summary 读一次快照（同源代理，避免 CORS/混合内容）；
  *   - 显示 CPU / 内存 / GPU / 温度，点击展开明细并可直接打开完整面板；
  *   - 会话区 slot 不存在时回退到 composer dock（官方模板位）。
