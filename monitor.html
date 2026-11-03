@@ -4,14 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script>
-    // 尽早应用主题，避免亮色闪一下
+    // 尽早应用主题，避免亮色闪一下；支持 auto（跟随系统）/ light / dark 三态
     (function () {
       try {
         var forced = new URLSearchParams(location.search).get('theme');
         var saved = localStorage.getItem('monitor-theme');
-        var dark = forced ? forced === 'dark'
-                 : (saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+        var valid = function (value) { return value === 'auto' || value === 'light' || value === 'dark'; };
+        var mode = valid(forced) ? forced : (valid(saved) ? saved : 'auto');
+        var dark = mode === 'dark'
+          || (mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme-mode', mode);
       } catch (e) {}
     })();
   </script>
@@ -19,6 +22,9 @@
   <title>硬件资源监控</title>
   <style>
     :root {
+      /* 声明配色方案，暗色下原生滚动条 / 表单控件才会跟着变暗 */
+      color-scheme: light;
+
       /* 字体：全部使用系统字体，避免外链 Google Fonts（国内不可达时数字度量会抖动） */
       --font-sans: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, -apple-system, "Segoe UI", sans-serif;
       --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "DejaVu Sans Mono", Menlo, monospace;
@@ -56,6 +62,7 @@
 
     /* 暗色模式 */
     html[data-theme="dark"] {
+      color-scheme: dark;
       --bg: #0f172a;
       --card: #1e293b;
       --text-primary: #e2e8f0;
@@ -75,7 +82,6 @@
       --shadow-sm: 0 1px 2px rgba(0,0,0,0.45);
       --shadow-md: 0 8px 24px rgba(0,0,0,0.55);
     }
-    html[data-theme="dark"] .gauge-ticks { fill: #475569; }
     html[data-theme="dark"] .sidebar-overlay { background: rgba(2, 6, 23, 0.6); }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -189,7 +195,7 @@
       border-radius: var(--radius);
       padding: 24px;
       box-shadow: var(--shadow-sm);
-      transition: box-shadow 0.3s ease, transform 0.2s ease;
+      transition: box-shadow 0.3s ease;
     }
 
     .card:hover { box-shadow: var(--shadow-md); }
@@ -203,7 +209,6 @@
 
     .gauge-bg { fill: none; stroke: var(--track); stroke-width: 18; }
     .gauge-fill { fill: none; stroke-width: 18; stroke-linecap: round; transition: stroke-dasharray 0.6s ease, stroke 0.3s ease; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.08)); }
-    .gauge-ticks { fill: #cbd5e1; font-size: 9px; font-family: var(--font-mono); }
 
     /* 读数用大字号建立层级；tabular-nums 避免每次刷新时数字宽度跳动 */
     .gauge-value { font-family: var(--font-mono); font-size: 48px; font-weight: 500; font-variant-numeric: tabular-nums; fill: var(--text-primary); }
@@ -350,6 +355,16 @@
     .error-desc { font-size: 13px; color: var(--text-secondary); }
     .btn-retry { display: inline-block; margin-top: 12px; padding: 8px 20px; border-radius: 9999px; background: var(--accent-button); color: white; font-size: 14px; cursor: pointer; border: none; }
     .btn-retry:hover { background: #1d4ed8; }
+
+    /* 尊重系统的「减少动态效果」设置 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -373,7 +388,7 @@
         </div>
       </div>
       <div class="header-right">
-        <button class="theme-toggle" onclick="toggleTheme()" title="切换暗色/亮色"><span id="themeLabel">🌙 暗色</span></button>
+        <button class="theme-toggle" onclick="toggleTheme()" title="切换主题：跟随系统 / 亮色 / 暗色"><span id="themeLabel">🖥 跟随系统</span></button>
         <div class="time-display" id="clock">--:--:--</div>
         <div class="date-display" id="dateDisplay">YYYY-MM-DD</div>
       </div>
@@ -561,6 +576,12 @@
       return el;
     }
 
+    // 拼 innerHTML 前统一转义，避免设备名 / 进程名里的尖括号破坏结构
+    function escapeHtml(text) {
+      return String(text ?? '').replace(/[&<>"']/g,
+        ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
     // 连接状态：状态点、副标题、最后更新时间、陈旧数据标记，并播报给读屏
     function setConnectionState(ok) {
       connected = ok;
@@ -616,7 +637,13 @@
         const c = this.canvas, ctx = this.ctx;
         const w = c.clientWidth, h = c.clientHeight;
         if (!w || !h) return;
-        c.width = w * 2; c.height = h * 2;
+        const targetWidth = Math.round(w * 2);
+        const targetHeight = Math.round(h * 2);
+        // 尺寸没变就不重设 backing store，否则每次刷新都重置上下文并触发一次布局
+        if (c.width !== targetWidth || c.height !== targetHeight) {
+          c.width = targetWidth;
+          c.height = targetHeight;
+        }
         ctx.setTransform(2, 0, 0, 2, 0, 0);   // 每次重设，避免缩放叠加
         ctx.clearRect(0, 0, w, h);
 
@@ -853,7 +880,7 @@
         document.getElementById('gpuBadge').textContent = `${Math.round(data.gpu.usage)}%`;
         const gpuName = data.gpu.name || 'GPU';
         document.getElementById('gpuInfo').innerHTML = `
-          <div class="info-row"><span class="info-label">NAME</span><span class="info-value">${gpuName}</span></div>
+          <div class="info-row"><span class="info-label">NAME</span><span class="info-value">${escapeHtml(gpuName)}</span></div>
           <div class="info-row"><span class="info-label">USAGE</span><span class="info-value">${Math.round(data.gpu.usage)}%</span></div>`;
       }
 
@@ -869,7 +896,7 @@
         setText('igpuBadge', `${Math.round(igpuUsage)}%`);
         const sharedGb = data.igpu.shared_gb != null ? data.igpu.shared_gb : 0;
         document.getElementById('igpuInfo').innerHTML = `
-          <div class="info-row"><span class="info-label">NAME</span><span class="info-value">${data.igpu.name || '集成显卡'}</span></div>
+          <div class="info-row"><span class="info-label">NAME</span><span class="info-value">${escapeHtml(data.igpu.name || '集成显卡')}</span></div>
           <div class="info-row"><span class="info-label">USAGE</span><span class="info-value">${igpuUsage.toFixed(1)}%</span></div>
           <div class="info-row"><span class="info-label">SHARED</span><span class="info-value">${sharedGb.toFixed(2)} GB</span></div>`;
       } else {
@@ -940,9 +967,7 @@
       memory: {
         sidebar: 'memSidebar',
         onOpen() {
-          fetchProcesses();
-          clearInterval(memSidebarIntervalId);
-          memSidebarIntervalId = setInterval(fetchProcesses, REFRESH_MS);
+          pollMemProcesses();
           return true;
         },
       },
@@ -958,13 +983,18 @@
       const panel = PANELS[name];
       if (!panel || activePanel === name) return;
       closeAllPanels({ restoreFocus: false });
-      if (panel.onOpen() === false) return;   // 例如首轮数据未到，点了也不该弹空面板
       const el = document.getElementById(panel.sidebar);
+      // 先落状态再跑 onOpen：面板自己的首次取数/轮询会读 activePanel
+      activePanel = name;
+      panelTrigger = trigger || null;
+      if (panel.onOpen() === false) {   // 例如首轮数据未到，点了也不该弹空面板
+        activePanel = null;
+        panelTrigger = null;
+        return;
+      }
       el.classList.add('active');
       el.setAttribute('aria-hidden', 'false');
       document.getElementById('sidebarOverlay').classList.add('active');
-      activePanel = name;
-      panelTrigger = trigger || null;
       const closeBtn = el.querySelector('.sidebar-close');
       if (closeBtn) closeBtn.focus();
     }
@@ -977,9 +1007,9 @@
         el.classList.remove('active');
         el.setAttribute('aria-hidden', 'true');
       });
-      if (memSidebarIntervalId) {
-        clearInterval(memSidebarIntervalId);
-        memSidebarIntervalId = null;
+      if (memPollTimer) {
+        clearTimeout(memPollTimer);
+        memPollTimer = null;
       }
       document.getElementById('sidebarOverlay').classList.remove('active');
       const hadPanel = activePanel !== null;
@@ -1043,8 +1073,6 @@
 
     function renderNetSidebar(data) {
       const list = document.getElementById('netAdapterList');
-      const escape = text => String(text).replace(/[&<>"']/g,
-        ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
       if (!data || !data.adapters || !data.adapters.length) {
         list.innerHTML = '<p style="color:var(--text-tertiary); font-size:13px;">未获取到网卡信息</p>';
@@ -1069,18 +1097,19 @@
         return `
           <div class="net-card">
             <div class="net-head">
-              <span class="net-name">${escape(adapter.name)}</span>
+              <span class="net-name">${escapeHtml(adapter.name)}</span>
               <span class="net-state ${adapter.up ? '' : 'down'}">${adapter.up ? '已连接' : '未连接'}</span>
             </div>
             ${rows.map(([label, value]) =>
-              `<div class="net-row"><span>${label}</span><span>${escape(value)}</span></div>`).join('')}
+              `<div class="net-row"><span>${label}</span><span>${escapeHtml(value)}</span></div>`).join('')}
           </div>`;
       }).join('');
     }
 
     // ---- MEMORY SIDEBAR（占用内存的进程排行，按名称合并） ----
     let memProcessData = null;
-    let memSidebarIntervalId = null;
+    let memPollTimer = null;
+    const MEM_REFRESH_MS = 3000;   // 进程列表比主指标慢一档，且串行排链，避免慢响应时请求叠加
     let memSortKey = 'memory';
     let memMetric = 'private';   // private=专用（≈系统进程管理器）, working=工作集
 
@@ -1109,6 +1138,17 @@
       } catch { /* 侧栏轮询失败静默 */ }
     }
 
+    // 串行排链：上一次请求结束后才安排下一次，隐藏时跳过取数
+    async function pollMemProcesses() {
+      if (memPollTimer) {
+        clearTimeout(memPollTimer);
+        memPollTimer = null;
+      }
+      if (activePanel !== 'memory') return;
+      if (!document.hidden) await fetchProcesses();
+      if (activePanel === 'memory') memPollTimer = setTimeout(pollMemProcesses, MEM_REFRESH_MS);
+    }
+
     function renderMemSidebar() {
       const data = memProcessData;
       if (!data || !data.processes) return;
@@ -1117,9 +1157,6 @@
       const sum = memMetric === 'working' ? data.sum_working_mb : data.sum_private_mb;
       setText('memSidebarSummary',
         `${Math.round(sum)} / ${Math.round(data.total_mb)} MB · ${data.process_count} 个进程 / ${data.count} 组`);
-
-      const escape = text => String(text).replace(/[&<>"']/g,
-        ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
       const rows = [...data.processes];
       if (memSortKey === 'name') {
@@ -1139,7 +1176,7 @@
         return `
           <div class="proc-row">
             <div class="proc-line">
-              <span class="proc-name" title="${escape(tip)}">${escape(row.name)}${count}</span>
+              <span class="proc-name" title="${escapeHtml(tip)}">${escapeHtml(row.name)}${count}</span>
               <span class="proc-mem">${mb.toFixed(0)} MB · ${percent.toFixed(1)}%</span>
             </div>
             <div class="proc-bar-bg"><div class="proc-bar-fill" style="width:${width.toFixed(1)}%; background:${color};"></div></div>
@@ -1148,17 +1185,20 @@
     }
 
     function renderSidebar(data) {
-      const physicalDisks = data.disk.filter(d => d.type === 'physical');
-      const diskRows = Array.isArray(data.disk) ? data.disk.filter(d => d && typeof d === 'object') : [];
-        const partitions = diskRows.filter(d => !d.type);
+      // 先做空值收敛：后端偶发缺 disk 字段时不应抛异常中断整个面板
+      const diskRows = Array.isArray(data && data.disk)
+        ? data.disk.filter(d => d && typeof d === 'object')
+        : [];
+      const physicalDisks = diskRows.filter(d => d.type === 'physical');
+      const partitions = diskRows.filter(d => !d.type);
 
       // Physical disks list
       const pdContainer = document.getElementById('physicalDiskList');
       if (physicalDisks.length > 0) {
         pdContainer.innerHTML = physicalDisks.map(d => `
           <div class="disk-card">
-            <span class="disk-name" title="${d.model || 'Unknown'}">${(d.model || 'Unknown').substring(0, 35)}</span>
-            <span class="disk-size">${d.size_gb != null ? d.size_gb + ' GB' : '--'} · ${d.interface_type || '--'}</span>
+            <span class="disk-name" title="${escapeHtml(d.model || 'Unknown')}">${escapeHtml((d.model || 'Unknown').substring(0, 35))}</span>
+            <span class="disk-size">${d.size_gb != null ? d.size_gb + ' GB' : '--'} · ${escapeHtml(d.interface_type || '--')}</span>
           </div>
         `).join('');
       } else {
@@ -1170,7 +1210,7 @@
       if (partitions.length > 0) {
         pContainer.innerHTML = partitions.map(d => `
           <div class="disk-card" style="flex-direction: column; align-items: stretch;">
-            <span class="disk-name">${d.device || d.mountpoint || d.mount_point || '未知分区'}</span>
+            <span class="disk-name">${escapeHtml(d.device || d.mountpoint || d.mount_point || '未知分区')}</span>
             <div class="disk-bar-container">
               <div class="disk-bar-bg">
                 <div class="disk-bar-fill" style="width: ${Math.min(d.usage_percent, 100)}%; background: ${d.usage_percent > 80 ? 'var(--danger-fill)' : d.usage_percent > 60 ? 'var(--warn-fill)' : 'var(--ok-fill)'}"></div>
@@ -1184,6 +1224,9 @@
       }
     }
 
+    // 与逻辑核心一一对应的节点缓存：首次构建，之后只改文本和曲线，避免每 2 秒整块重建
+    let coreNodes = [];
+
     function renderCoreSidebar(data) {
       const coresEl = document.getElementById('coreLoads');
       const perCoreHistory = window._corePerCoreHistory || (window._corePerCoreHistory = {});
@@ -1195,61 +1238,71 @@
         fillBar.style.backgroundColor = data.cpu.usage > 80 ? 'var(--danger-fill)' : data.cpu.usage > 60 ? 'var(--warn-fill)' : 'var(--ok-fill)';
       }
 
-      // Clear and rebuild the grid layout (4 per row)
-      coresEl.innerHTML = '';
       coresEl.style.display = 'grid';
       coresEl.style.gridTemplateColumns = 'repeat(4, 1fr)';
 
-      for (let i = 0; i < data.cpu.count_logical; i++) {
+      const total = data.cpu.count_logical || 0;
+      // 核心数变化（极少见）时才重建骨架
+      if (coreNodes.length !== total) {
+        coresEl.innerHTML = '';
+        coreNodes = [];
+        for (let i = 0; i < total; i++) {
+          const cardWrap = document.createElement('div');
+          cardWrap.style.cssText = 'background: var(--bg); border-radius: 8px; padding: 8px 12px;';
+
+          const labelRow = document.createElement('div');
+          labelRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
+          const coreLabel = document.createElement('span');
+          coreLabel.style.cssText = 'font-size:12px; font-family:var(--font-mono); color:var(--text-secondary);';
+          coreLabel.textContent = `Core ${i}`;
+          const valLabel = document.createElement('span');
+          valLabel.style.cssText = 'font-size:12px; font-family:var(--font-mono); font-weight:500;';
+          valLabel.textContent = '--%';
+          labelRow.appendChild(coreLabel);
+          labelRow.appendChild(valLabel);
+
+          const canvas = document.createElement('canvas');
+          canvas.style.cssText = 'width:100%; height:32px; display:block;';
+
+          cardWrap.appendChild(labelRow);
+          cardWrap.appendChild(canvas);
+          coresEl.appendChild(cardWrap);
+          coreNodes.push({ valLabel, canvas });
+        }
+      }
+
+      for (let i = 0; i < total; i++) {
         if (!perCoreHistory[i]) perCoreHistory[i] = [];
-        if (i < data.cpu.per_core.length) {
-          const val = Math.min(data.cpu.per_core[i], 100);
-          perCoreHistory[i].push(val);
-          // Keep last ~37 samples (~30s at 800ms interval)
+        const hasValue = i < data.cpu.per_core.length;
+        const value = hasValue ? Math.min(data.cpu.per_core[i], 100) : null;
+        if (value !== null) {
+          perCoreHistory[i].push(value);
+          // 保留最近 37 个采样点（约 74 秒）
           if (perCoreHistory[i].length > 37) perCoreHistory[i] = perCoreHistory[i].slice(-37);
         }
-
-        const cardWrap = document.createElement('div');
-        cardWrap.style.cssText = 'background: var(--bg); border-radius: 8px; padding: 8px 12px;';
-
-        // Label row: core number + current value
-        const labelRow = document.createElement('div');
-        labelRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
-        const coreLabel = document.createElement('span');
-        coreLabel.style.cssText = 'font-size:11px; font-family:var(--font-mono); color:var(--text-secondary);';
-        coreLabel.textContent = `Core ${i}`;
-        const valLabel = document.createElement('span');
-        valLabel.style.cssText = 'font-size:12px; font-family:var(--font-mono); font-weight:500;';
-        valLabel.textContent = `${perCoreHistory[i].length > 0 ? Math.round(perCoreHistory[i][perCoreHistory[i].length - 1]) : '--'}%`;
-        labelRow.appendChild(coreLabel);
-        labelRow.appendChild(valLabel);
-
-        // Sparkline canvas (64x32)
-        const canvas = document.createElement('canvas');
-        canvas.style.cssText = 'width:100%; height:32px;';
-        canvas.setAttribute('height', 32);
-        canvas.setAttribute('width', 0); // set to clientWidth in draw()
-
-        cardWrap.appendChild(labelRow);
-        cardWrap.appendChild(canvas);
-        coresEl.appendChild(cardWrap);
-
-        // Draw sparkline immediately
-        drawCoreSparkline(canvas, perCoreHistory[i], i < data.cpu.per_core.length ? Math.min(data.cpu.per_core[i], 100) : 0);
+        const node = coreNodes[i];
+        node.valLabel.textContent = value === null ? '--%' : `${Math.round(value)}%`;
+        drawCoreSparkline(node.canvas, perCoreHistory[i], value);
       }
     }
 
     function drawCoreSparkline(canvas, data, currentVal) {
-      if (data.length === 0 || !canvas) return;
-      const ctx = canvas.getContext('2d');
+      if (!canvas || data.length === 0) return;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
       // Handle device pixel ratio
       const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const targetWidth = Math.round(rect.width * dpr);
+      const targetHeight = Math.round(rect.height * dpr);
+      // 尺寸没变就不重设 backing store，否则每帧都会重置上下文并触发一次布局
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+      }
+      const ctx = canvas.getContext('2d');
       const w = rect.width, h = rect.height;
 
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
       if (data.length < 2) return;
@@ -1293,23 +1346,50 @@
     }
 
 
-    // ---- THEME ----
-    function applyTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      try { localStorage.setItem('monitor-theme', theme); } catch (e) { /* 隐私模式忽略 */ }
-      setText('themeLabel', theme === 'dark' ? '☀️ 亮色' : '🌙 暗色');
+    // ---- THEME（auto / light / dark 三态，auto 跟随系统） ----
+    const THEME_MODES = ['auto', 'light', 'dark'];
+    const THEME_LABELS = { auto: '🖥 跟随系统', light: '☀️ 亮色', dark: '🌙 暗色' };
+    const schemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function currentThemeMode() {
+      const mode = document.documentElement.getAttribute('data-theme-mode');
+      return THEME_MODES.includes(mode) ? mode : 'auto';
     }
+
+    function applyTheme(mode, persist = true) {
+      const next = THEME_MODES.includes(mode) ? mode : 'auto';
+      const dark = next === 'dark' || (next === 'auto' && schemeMedia.matches);
+      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme-mode', next);
+      // 只有用户主动选择时才落盘，URL ?theme= 预览不写入
+      if (persist) {
+        try { localStorage.setItem('monitor-theme', next); } catch (e) { /* 隐私模式忽略 */ }
+      }
+      setText('themeLabel', THEME_LABELS[next]);
+      const btn = document.querySelector('.theme-toggle');
+      if (btn) btn.setAttribute('aria-label', `当前主题：${THEME_LABELS[next]}，点击切换`);
+    }
+
     function toggleTheme() {
-      var current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-      applyTheme(current === 'dark' ? 'light' : 'dark');
+      const index = THEME_MODES.indexOf(currentThemeMode());
+      applyTheme(THEME_MODES[(index + 1) % THEME_MODES.length]);
     }
+
+    // auto 模式下跟随系统深浅色变化
+    const onSchemeChange = () => { if (currentThemeMode() === 'auto') applyTheme('auto', false); };
+    if (typeof schemeMedia.addEventListener === 'function') schemeMedia.addEventListener('change', onSchemeChange);
+    else if (typeof schemeMedia.addListener === 'function') schemeMedia.addListener(onSchemeChange);
 
     // ---- INIT ----
     updateClock(); setInterval(updateClock, 1000);
-    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+    applyTheme(currentThemeMode(), !new URLSearchParams(location.search).get('theme'));
     pollOnce();   // 首轮采集，之后每 REFRESH_MS 一轮
     // 标签页切回来时立即补一次，别等下一个周期
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) fetchAll(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      fetchAll();
+      if (activePanel === 'memory') pollMemProcesses();
+    });
 
     // 支持 #memory / #network / #disk / #cores 直接展开对应侧栏（也方便书签）
     (function openFromHash() {
