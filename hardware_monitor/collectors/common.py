@@ -148,8 +148,13 @@ def collect_processes(limit=40):
 
 
 # ---------------- 磁盘：平台物理盘 + psutil 分区 ----------------
-def collect_disk(physical=None):
-    """物理硬盘（平台提供，含未分配盘符的盘）+ 分区用量（psutil），返回混合列表。"""
+def collect_disk(physical=None, partition_parent=None):
+    """物理硬盘（平台提供）+ 分区用量（psutil），返回混合列表。
+
+    `partition_parent` 是平台提供的映射函数（分区设备名 -> 父设备名）；
+    返回非空时给分区条目附加 `parent_device`，前端可据此把分区与整盘关联。
+    Windows 没有可靠的映射，传 None 时不附加该字段（保持原有响应结构）。
+    """
     disks = list(physical or [])
 
     for part in psutil.disk_partitions(all=True):
@@ -158,7 +163,7 @@ def collect_disk(physical=None):
         except (PermissionError, OSError):
             # 空光驱 / 无介质 / 无权限的分区直接跳过
             continue
-        disks.append({
+        entry = {
             "device": part.device,
             "mountpoint": part.mountpoint,
             "fstype": part.fstype,
@@ -166,7 +171,15 @@ def collect_disk(physical=None):
             "used_gb": round(usage.used / (1024 ** 3), 1),
             "free_gb": round(usage.free / (1024 ** 3), 1),
             "usage_percent": usage.percent,
-        })
+        }
+        if partition_parent is not None:
+            try:
+                parent = partition_parent(part.device)
+            except Exception:  # noqa: BLE001 - 映射失败不应影响磁盘数据
+                parent = None
+            if parent:
+                entry["parent_device"] = parent
+        disks.append(entry)
 
     return disks
 

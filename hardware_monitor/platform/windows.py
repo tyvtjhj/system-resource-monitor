@@ -134,6 +134,12 @@ def physical_disks():
     return disks
 
 
+def partition_parent(device):
+    """Windows 分区盘符无法可靠映射到物理盘，统一返回 None（保持接口一致）。"""
+    del device
+    return None
+
+
 # ---------------- 核显（GPU 性能计数器） ----------------
 class GpuPerfReader:
     """用 Windows 的 GPU 性能计数器读取核显数据（所有厂商通用，不依赖 NVML）。

@@ -30,6 +30,7 @@ is_elevated = _impl.is_elevated
 request_elevation = _impl.request_elevation
 subprocess_flags = _impl.subprocess_flags
 physical_disks = _impl.physical_disks
+partition_parent = _impl.partition_parent
 network_details = _impl.network_details
 temperature_sources = _impl.temperature_sources
 integrated_gpu = _impl.integrated_gpu

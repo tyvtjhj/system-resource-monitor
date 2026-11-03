@@ -56,7 +56,8 @@ def sampler_loop():
 
             if cycle_started >= next_slow:
                 next_slow = cycle_started + config.SLOW_INTERVAL
-                collect("disk", common.collect_disk, platform_info.physical_disks())
+                collect("disk", common.collect_disk, platform_info.physical_disks(),
+                        platform_info.partition_parent)
                 collect("system_info", common.collect_system_info)
                 collect("igpu", platform_info.integrated_gpu)
 

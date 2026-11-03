@@ -82,6 +82,47 @@ def test_collect_disk_merges_physical_and_partitions(monkeypatch):
     assert rows[1]["total_gb"] == 100.0
 
 
+def _fake_disk_env(monkeypatch, device="/dev/sda1"):
+    part = SimpleNamespace(device=device, mountpoint="/", fstype="ext4")
+    usage = SimpleNamespace(
+        total=100 * 1024 ** 3, used=50 * 1024 ** 3, free=50 * 1024 ** 3, percent=50.0
+    )
+    monkeypatch.setattr(common.psutil, "disk_partitions", lambda all=True: [part])
+    monkeypatch.setattr(common.psutil, "disk_usage", lambda mountpoint: usage)
+
+
+def test_collect_disk_attaches_parent_device(monkeypatch):
+    _fake_disk_env(monkeypatch, device="/dev/sda1")
+
+    rows = common.collect_disk([], partition_parent=common_parent_mapper)
+
+    assert rows[0]["parent_device"] == "/dev/sda"
+
+
+def common_parent_mapper(device):
+    return "/dev/sda" if device == "/dev/sda1" else None
+
+
+def test_collect_disk_without_mapper_keeps_schema(monkeypatch):
+    _fake_disk_env(monkeypatch)
+
+    rows = common.collect_disk([])
+
+    assert "parent_device" not in rows[0]
+
+
+def test_collect_disk_mapper_exception_is_ignored(monkeypatch):
+    _fake_disk_env(monkeypatch)
+
+    def broken_mapper(device):
+        raise RuntimeError("mapper failed")
+
+    rows = common.collect_disk([], partition_parent=broken_mapper)
+
+    assert "parent_device" not in rows[0]
+    assert rows[0]["usage_percent"] == 50.0
+
+
 def test_collect_disk_skips_inaccessible_partitions(monkeypatch):
     part = SimpleNamespace(device="D:", mountpoint="D:\\", fstype="CDFS")
 

@@ -32,6 +32,7 @@ PLATFORM_FUNCTIONS = (
     "request_elevation",
     "subprocess_flags",
     "physical_disks",
+    "partition_parent",
     "network_details",
     "temperature_sources",
     "integrated_gpu",
@@ -105,6 +106,16 @@ def test_parent_device_mapping():
     # 整盘或无输入没有父设备
     assert parent_device("/dev/sda") is None
     assert parent_device("") is None
+
+
+def test_linux_partition_parent_mapping():
+    assert linux_platform.partition_parent("/dev/sda1") == "/dev/sda"
+    assert linux_platform.partition_parent("/dev/nvme0n1p2") == "/dev/nvme0n1"
+    assert linux_platform.partition_parent("/dev/sda") is None
+
+
+def test_windows_partition_parent_returns_none():
+    assert windows_platform.partition_parent("C:\\") is None
 
 
 def test_is_elevated_returns_bool():

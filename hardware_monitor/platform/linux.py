@@ -27,6 +27,7 @@ __all__ = [
     "subprocess_flags",
     "physical_disks",
     "parent_device",
+    "partition_parent",
     "network_details",
     "temperature_sources",
     "integrated_gpu",
@@ -196,6 +197,11 @@ def parent_device(device: str) -> str | None:
         if match:
             return f"/dev/{match.group(1)}"
     return None
+
+
+def partition_parent(device: str) -> str | None:
+    """平台统一接口：分区设备名 -> 父设备名（供 collect_disk 关联分区与整盘）。"""
+    return parent_device(device)
 
 
 # ---------------- 网卡详情 ----------------
