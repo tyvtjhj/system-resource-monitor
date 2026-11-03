@@ -1,0 +1,29 @@
+[project]
+name = "hardware-monitor"
+version = "2.0.0"
+description = "Local hardware monitor with Flask and a zero-build dashboard"
+requires-python = ">=3.10"
+dependencies = [
+  "flask>=3.0,<4",
+  "psutil>=5.9,<8",
+  "pynvml>=11.5,<14; sys_platform != 'darwin'",
+  "WMI>=1.5.1,<2; sys_platform == 'win32'",
+  "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6", "pip-tools>=7"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hardware_monitor*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
