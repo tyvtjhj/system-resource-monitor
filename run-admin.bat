@@ -9,7 +9,12 @@ cd /d "%~dp0"
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Requesting administrator rights...
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    rem Re-launch elevated and forward this batch file's arguments.
+    rem The args go through an environment variable so quoting (spaces, &, ...) survives
+    rem the cmd -> PowerShell -> Start-Process boundary; PowerShell then passes them as
+    rem -ArgumentList. The elevated instance re-runs this file with the same %*.
+    set "HM_ADMIN_ARGS=%*"
+    powershell -NoProfile -Command "$a = [Environment]::GetEnvironmentVariable('HM_ADMIN_ARGS'); if ([string]::IsNullOrEmpty($a)) { Start-Process -FilePath '%~f0' -Verb RunAs } else { Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList $a }"
     exit /b
 )
 

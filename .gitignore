@@ -19,3 +19,6 @@ plugin/adapters/vscode/out/
 # 系统缩略文件
 Thumbs.db
 .DS_Store
+
+# 锁脚本临时文件（生成中断时可能残留；正常结束由脚本清理）
+requirements*.txt.tmp*

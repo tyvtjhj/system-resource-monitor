@@ -46,6 +46,8 @@ $env:MONITOR_NO_ELEVATE='1'; py -3.10 server.py
 
 > 注意：PATH 上的 `python` 可能不是装了依赖的那个解释器，用 `py -3.10` 或 `run.bat` 最稳。
 
+`run.bat` / `run-admin.bat` 会把命令行参数透传给 `server.py`（例如 `run-admin.bat --no-elevate`）；`run-admin.bat` 提权重启时同样会带上这些参数。
+
 ## 可复制环境（T1）
 
 推荐用脚本一键创建项目内虚拟环境并安装锁定依赖：
@@ -74,6 +76,7 @@ bash scripts/bootstrap.sh
 - 升级依赖的流程：改 `.in` → 运行锁脚本 → 检查 `git diff` → 提交 `requirements*.txt`。
 - 环境变量示例见 `.env.example`（程序不会自动加载）。
 - 沙箱/代理受限环境若 pip 卡住，可先设 `PIP_NO_CACHE_DIR=1`、`PIP_DISABLE_PIP_VERSION_CHECK=1` 再执行。
+- 锁脚本的临时文件（`requirements*.txt.tmp*`）已加入 `.gitignore`；脚本正常结束会清理，中断残留会在下次运行或下次手工执行时自动移除。
 
 ## 插件接入（预留）
 
