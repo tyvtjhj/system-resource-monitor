@@ -501,7 +501,7 @@
         <button class="sort-btn" data-metric="working" onclick="setMemMetric('working')">工作集</button>
       </div>
       <div class="info-label" style="margin-top:8px; font-size:11px; line-height:1.5;">
-        同名进程已合并；「专用」≈ 任务管理器「内存」列，「工作集」还含共享页
+        同名进程已合并；「专用」≈ 系统进程管理器「内存」列，「工作集」还含共享页
       </div>
 
       <h3 class="sidebar-section-title" style="padding:0; margin-top:22px;">TOP PROCESSES</h3>
@@ -509,7 +509,7 @@
     </div>
   </aside>
 
-  <!-- Network Sidebar (ipconfig) -->
+  <!-- Network Sidebar (网卡详情) -->
   <aside class="sidebar" id="netSidebar">
     <button class="sidebar-close" onclick="closeNetSidebar()">✕</button>
     <h2 class="sidebar-title">NETWORK DETAILS</h2>
@@ -523,13 +523,17 @@
 
   <!-- Scripts -->
   <script>
-    // 与服务同源时自动推导；旧版写死 http://192.168.31.238:5678，换机/换 IP 就失效
-    const API_BASE = `http://${location.hostname}:${location.port || 5678}`;
+    // 同源优先：页面由本服务提供时直接用当前 origin（反向代理 / 非 5678 端口 / HTTPS 都能工作）；
+    // 也可用 ?api=http://host:port 显式指定后端；file:// 打开时回退本机默认地址。
+    const API_BASE = new URLSearchParams(location.search).get('api')
+      || (location.protocol === 'file:' ? 'http://127.0.0.1:5678' : location.origin);
     // 服务端设置了 MONITOR_TOKEN 时，从页面 URL 的 ?token= 带过来
     const TOKEN = new URLSearchParams(location.search).get('token') || '';
     const REFRESH_MS = 2000;   // 轮询间隔：原 800ms 小于单次响应耗时，请求会首尾相接
     let connected = false;
     let pollTimer = null;
+    // 平台能力表（/api/all 的 platform.capabilities）；缺省视为支持，兼容旧后端
+    let platformCaps = {};
 
     function apiFetch(path) {
       return fetch(`${API_BASE}${path}`, {
@@ -701,6 +705,10 @@
     }
 
     function updateDashboard(data) {
+      platformCaps = (data.platform && data.platform.capabilities) || {};
+      const gpuNvidiaAvailable = platformCaps.gpu_nvidia !== false;
+      const igpuSupported = platformCaps.gpu_integrated !== false;
+
       // Overall health (inverse of weighted load)
       let overallLoad = 0;
       if (data.cpu && data.cpu.usage !== undefined) overallLoad += data.cpu.usage * 0.4;
@@ -791,7 +799,12 @@
       }
 
       // GPU gauge (moved from inline)
-      if (data.gpu && data.gpu.usage !== undefined) {
+      if (!gpuNvidiaAvailable) {
+        setText('gpuBadge', '--%');
+        setGauge(gpuG, 0);
+        document.getElementById('gpuInfo').innerHTML =
+          '<div class="info-row"><span class="info-label">STATUS</span><span class="info-value">当前平台不可用</span></div>';
+      } else if (data.gpu && data.gpu.usage !== undefined) {
         setGauge(gpuG, Math.min(data.gpu.usage, 100));
         document.getElementById('gpuBadge').textContent = `${Math.round(data.gpu.usage)}%`;
         const gpuName = data.gpu.name || 'GPU';
@@ -800,8 +813,13 @@
           <div class="info-row"><span class="info-label">USAGE</span><span class="info-value">${Math.round(data.gpu.usage)}%</span></div>`;
       }
 
-      // 核显（集成显卡）：Windows GPU 性能计数器，按共享内存识别
-      if (data.igpu) {
+      // 核显（集成显卡）：系统 GPU 性能计数器，按共享内存识别
+      if (!igpuSupported) {
+        setText('igpuBadge', '--%');
+        setGauge(igpuG, 0);
+        document.getElementById('igpuInfo').innerHTML =
+          '<div class="info-row"><span class="info-label">STATUS</span><span class="info-value">当前平台不可用</span></div>';
+      } else if (data.igpu) {
         const igpuUsage = Math.min(data.igpu.usage || 0, 100);
         setGauge(igpuG, igpuUsage);
         setText('igpuBadge', `${Math.round(igpuUsage)}%`);
@@ -837,9 +855,13 @@
 
         // 标出 CPU 温度来自哪个接口：内核级 CPU Package 还是 ACPI 平台热区
         const cpuMeta = data.temperature.cpu || null;
-        const sourceLabels = { lhm: 'CPU PKG', ohm: 'CPU OHM', acpi: 'CPU ACPI', wmi: 'CPU WMI' };
+        const sourceLabels = {
+          lhm: 'CPU PKG', ohm: 'CPU OHM', acpi: 'CPU ACPI', wmi: 'CPU WMI',
+          hwmon: 'CPU HWMON', thermal: 'CPU THERMAL',
+        };
         const sourceKey = cpuMeta && cpuMeta.source;
-        setText('cpuTempLabel', (sourceKey && sourceLabels[sourceKey]) || 'CPU');
+        // 来源缺失或未知时显示 --，不猜测也不抛异常
+        setText('cpuTempLabel', (sourceKey && sourceLabels[sourceKey]) || '--');
         const cpuEl = document.getElementById('cpuTemp');
         if (cpuEl) {
           cpuEl.title = cpuMeta && cpuMeta.name
@@ -900,7 +922,7 @@
       closeNetSidebar();
     });
 
-    // ---- NETWORK SIDEBAR（ipconfig） ----
+    // ---- NETWORK SIDEBAR（网卡详情） ----
     async function openNetSidebar() {
       document.getElementById('netSidebar').classList.add('active');
       document.getElementById('sidebarOverlay').classList.add('active');
@@ -959,7 +981,7 @@
     let memProcessData = null;
     let memSidebarIntervalId = null;
     let memSortKey = 'memory';
-    let memMetric = 'private';   // private=专用（≈任务管理器）, working=工作集
+    let memMetric = 'private';   // private=专用（≈系统进程管理器）, working=工作集
 
     function openMemSidebar() {
       document.getElementById('memSidebar').classList.add('active');

@@ -25,6 +25,7 @@
 | [开发执行任务书](开发执行任务书.md) | 交给编码 agent 的跨平台、可复制环境与插件化实施任务书 |
 | [T1 完成报告](T1-可复制运行环境-完成报告.md) | 依赖锁文件、bootstrap/lock-deps、doctor、`.venv` 启动入口与三轮评审修复 |
 | [T2 完成报告](T2-后端模块化与平台抽象-完成报告.md) | `hardware_monitor` 包结构、Windows/Linux 平台接口、API 变更、回归对比与测试 |
+| [T3 完成报告](T3-前端平台适配-完成报告.md) | 同源 `API_BASE`、能力降级（GPU/iGPU/温度）、`hwmon`/`thermal` 标签、平台中性文案与无头浏览器验证 |
 
 ## 快速开始
 
