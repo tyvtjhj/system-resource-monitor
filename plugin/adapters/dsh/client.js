@@ -169,6 +169,58 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** 侧边栏图标：显示器 + 心跳波形，跟随宿主 currentColor。 */
+    function HardwareMonitorIcon() {
+      return h('svg', {
+        viewBox: '0 0 16 16', width: 16, height: 16, fill: 'none',
+        'aria-hidden': 'true', style: { display: 'block' },
+      },
+      h('rect', { x: 1.5, y: 2.5, width: 13, height: 9, rx: 1.5, stroke: 'currentColor', strokeWidth: 1.3 }),
+      h('path', {
+        d: 'M3.5 7h2l1.2-2.2L8.2 9l1.1-1.6h2.2',
+        stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round', strokeLinejoin: 'round',
+      }),
+      h('path', { d: 'M5.5 13.5h5', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }));
+    }
+
+    /** 侧边栏「完整面板」页：内嵌监控仪表盘（token 从 localStorage 读取）。 */
+    function HardwareMonitorPanel() {
+      return h('iframe', {
+        src: dashboardUrl(DEFAULT_BASE),
+        title: 'Hardware Monitor',
+        style: { width: '100%', height: '100%', border: '0', display: 'block' },
+      });
+    }
+
+    /**
+     * 在侧边栏注册入口图标 + 对应的主面板（参考插件市场的 sidebar.panellist / main 槽位）。
+     * 点击图标时由宿主切换 main(key=hardware-monitor)，即内嵌完整面板。
+     */
+    function mountSidebar(ctx) {
+      let offRow = null;
+      let offPanel = null;
+      try {
+        ctx.slots.inject('sidebar.panellist', () => {
+          try {
+            offRow = ctx.slots.register({
+              name: 'sidebar.panellist',
+              id: 'hardware-monitor',
+              order: 2,
+              label: () => '硬件监控',
+            }, HardwareMonitorIcon);
+          } catch { /* 宿主版本不支持侧边栏入口 */ }
+        });
+      } catch { /* ignore */ }
+      try {
+        // key 必须与 sidebar.panellist 的 id 一致，宿主点击入口时按 key 打开该面板。
+        offPanel = ctx.slots.register({ name: 'main', key: 'hardware-monitor' }, HardwareMonitorPanel);
+      } catch { /* 宿主版本不支持主面板槽位 */ }
+      return () => {
+        try { if (typeof offRow === 'function') offRow(); } catch { /* ignore */ }
+        try { if (typeof offPanel === 'function') offPanel(); } catch { /* ignore */ }
+      };
+    }
+
     /**
      * 尝试把挂件注册进某个 slot。
      * @param {object} ctx - client 上下文（含 slots 服务）
@@ -196,6 +248,8 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        // 侧边栏入口 + 完整面板（像插件市场一样有图标入口）
+        mountSidebar(ctx);
         // 首选会话区右上角；若该 slot 在当前版本不可用，退回输入框 dock（官方模板位）。
         if (!mountAt(ctx, 'conversation.session.header.corner', 60)) {
           mountAt(ctx, 'conversation.composer.dock', 60);

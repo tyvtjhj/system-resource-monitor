@@ -57,6 +57,14 @@ powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\install.ps1
 localStorage.setItem('hardware-monitor-token', '你的口令')
 ```
 
+### 界面入口
+
+- **对话右上角**：实时小挂件（CPU/MEM/GPU/TEMP，点击展开明细）；
+- **侧边栏图标**：像插件市场一样在侧边栏注册入口（`sidebar.panellist`），点击后
+  由宿主打开 `main(key=hardware-monitor)` 面板，内嵌完整仪表盘（iframe 指向
+  `http://127.0.0.1:5678/`，启用 token 时从 `localStorage.hardware-monitor-token` 读取并拼接）；
+- 安装/重载后需刷新 DSH 页面（Ctrl+R）加载客户端半。
+
 ### 工具
 
 `hardware_monitor_status`：返回 CPU/内存/GPU/温度/网络/开机时长，并附 `text` 供模型直接引用。

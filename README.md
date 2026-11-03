@@ -95,7 +95,7 @@ bash scripts/bootstrap.sh
 
 **DSH 原生插件（推荐）**：`plugin/adapters/dsh/` 提供对话右上角挂件与 `hardware_monitor_status` 工具，
 运行 `powershell -ExecutionPolicy Bypass -File .\plugindapters\dsh\install.ps1` 安装，
-刷新 DSH 页面（Ctrl+R）后出现挂件。服务地址/Token 通过启动 DSH 前的
+刷新 DSH 页面（Ctrl+R）后出现对话挂件，并在侧边栏出现「硬件监控」图标，点击打开完整面板。服务地址/Token 通过启动 DSH 前的
 `HARDWARE_MONITOR_URL` / `HARDWARE_MONITOR_TOKEN` 配置。
 
 页面脚本支持 `?api=<base-url>` 指定后端，便于反向代理/远程开发。
