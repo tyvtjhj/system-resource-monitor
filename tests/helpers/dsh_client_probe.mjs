@@ -69,7 +69,6 @@ const panelState = {
     platform: { os: 'windows' },
   },
   processes: { process_count: 3, processes: [{ name: 'fake.exe', pids: 2, private_mb: 10, working_set_mb: 20 }] },
-  network: { count: 1, adapters: [{ name: 'Ethernet', up: true, speed_mbps: 1000 }] },
   offline: false,
   updatedAt: new Date(),
   baseUrl: 'http://127.0.0.1:5678',

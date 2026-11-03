@@ -183,22 +183,6 @@ window.__ModuleLoader__.load({
       h('path', { d: 'M5.5 13.5h5', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }));
     }
 
-    function linkSpeedMbps(network) {
-      const adapters = network && Array.isArray(network.adapters) ? network.adapters : [];
-      return adapters
-        .filter((adapter) => adapter && adapter.up)
-        .reduce((max, adapter) => Math.max(max, Number(adapter.speed_mbps) || 0), 0);
-    }
-
-    function networkUsagePercent(data, network) {
-      const net = (data && data.network_speed) || {};
-      const down = Number(net.download_mbps) || 0;
-      const up = Number(net.upload_mbps) || 0;
-      const link = linkSpeedMbps(network);
-      if (!link) return null;
-      return Math.min(100, ((down + up) * 8 / link) * 100);
-    }
-
     function PercentRing({ value, label, color, sub }) {
       const has = value !== null && value !== undefined && Number.isFinite(Number(value));
       const pct = has ? Math.max(0, Math.min(100, Number(value))) : 0;
@@ -266,15 +250,15 @@ window.__ModuleLoader__.load({
      *
      * 仪表盘页面带 `Content-Security-Policy: frame-ancestors 'self'`，DSH 的 iframe 属于
      * 不同 origin 会被浏览器拦截 → 空白。这里改为直接请求 DSH 同源代理
-     * `/hardware-monitor-api/{summary,processes,network}`，在宿主内渲染完整数据。
+     * `/hardware-monitor-api/{summary,processes}`，在宿主内渲染完整数据。
      */
     function HardwareMonitorPanel() {
       const [state, setState] = React.useState({
-        data: null, processes: null, network: null, offline: false, updatedAt: null, baseUrl: DEFAULT_BASE,
+        data: null, processes: null, offline: false, updatedAt: null, baseUrl: DEFAULT_BASE,
       });
       const [tick, setTick] = React.useState(0);
       const rootRef = React.useRef(null);
-      const historyRef = React.useRef({ cpu: [], mem: [], net: [] });
+      const historyRef = React.useRef({ cpu: [], mem: [], gpu: [] });
 
       React.useEffect(() => {
         let cancelled = false;
@@ -288,10 +272,9 @@ window.__ModuleLoader__.load({
             return;
           }
           try {
-            const [summaryResp, processResp, networkResp] = await Promise.all([
+            const [summaryResp, processResp] = await Promise.all([
               fetch('/hardware-monitor-api/summary', { cache: 'no-store' }),
               fetch('/hardware-monitor-api/processes', { cache: 'no-store' }).catch(() => null),
-              fetch('/hardware-monitor-api/network', { cache: 'no-store' }).catch(() => null),
             ]);
             if (!summaryResp.ok) throw new Error(`HTTP ${summaryResp.status}`);
             const summary = await summaryResp.json();
@@ -300,16 +283,12 @@ window.__ModuleLoader__.load({
             if (processResp && processResp.ok) {
               try { processes = await processResp.json(); } catch { processes = null; }
             }
-            let networkDetails = null;
-            if (networkResp && networkResp.ok) {
-              try { networkDetails = await networkResp.json(); } catch { networkDetails = null; }
-            }
             if (cancelled) return;
             failures = 0;
             const snapshotData = summary.data || null;
             const cpuValue = num(((snapshotData || {}).cpu || {}).usage) || 0;
             const memValue = num(((snapshotData || {}).memory || {}).usage_percent) || 0;
-            const netPercent = networkUsagePercent(snapshotData, networkDetails);
+            const gpuValue = num(((snapshotData || {}).gpu || {}).usage) || 0;
             const history = historyRef.current;
             const pushHistory = (key, value) => {
               const list = history[key];
@@ -319,11 +298,10 @@ window.__ModuleLoader__.load({
             };
             pushHistory('cpu', cpuValue);
             pushHistory('mem', memValue);
-            pushHistory('net', netPercent === null ? 0 : netPercent);
+            pushHistory('gpu', gpuValue);
             setState({
               data: snapshotData,
               processes,
-              network: networkDetails,
               offline: false,
               updatedAt: new Date(),
               baseUrl: summary.base_url || DEFAULT_BASE,
@@ -389,8 +367,6 @@ window.__ModuleLoader__.load({
       const download = num(network.download_mbps);
       const upload = num(network.upload_mbps);
       const latency = num(data.latency_ms);
-      const linkMbps = linkSpeedMbps(state.network);
-      const netUsage = networkUsagePercent(data, state.network);
       const history = historyRef.current;
 
       const panelStyle = {
@@ -555,12 +531,10 @@ window.__ModuleLoader__.load({
               h(Sparkline, { values: history.mem, color: '#8b5cf6' })),
             h('div', { style: { ...cardStyle, padding: '10px 12px' } },
               h(PercentRing, {
-                value: netUsage, label: '网络', color: '#10b981',
-                sub: linkMbps
-                  ? `↓${fmt(download, 1)} ↑${fmt(upload, 1)} MB/s · ${fmt(linkMbps / 1000, 1)} Gbps`
-                  : `↓${fmt(download, 1)} ↑${fmt(upload, 1)} MB/s · 链路未知`,
+                value: gpuUsage, label: 'GPU', color: '#f59e0b',
+                sub: `${gpu.name || '--'} · 显存 ${fmt(gpu.used_gb, 1)}/${fmt(gpu.total_gb, 1)} GB`,
               }),
-              h(Sparkline, { values: history.net, color: '#10b981' })))),
+              h(Sparkline, { values: history.gpu, color: '#f59e0b' })))),
 
         h('div', { style: sectionStyle },
           h('div', { style: rowStyle },

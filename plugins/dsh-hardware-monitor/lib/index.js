@@ -247,20 +247,6 @@ function registerDataRoutes(ctx) {
         }
         return
       }
-      if (path === '/hardware-monitor-api/network') {
-        try {
-          const result = await httpJson('/api/network')
-          if (result.status !== 200) {
-            sendJson(res, result.status, { ok: false, status: result.status, data: result.data })
-            return
-          }
-          sendJson(res, 200, result.data)
-        } catch (error) {
-          void ensureService('network-route')
-          sendJson(res, 503, { ok: false, error: 'service unavailable', detail: String(error?.message || error) })
-        }
-        return
-      }
       sendJson(res, 404, { ok: false, error: 'unknown endpoint' })
     } catch (error) {
       try {

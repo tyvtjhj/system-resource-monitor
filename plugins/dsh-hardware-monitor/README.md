@@ -99,9 +99,8 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 
 侧边栏面板在「物理硬盘」与「进程 Top」之间提供「实时可视化」区块：
 
-- CPU、内存：百分比环 + 最近 60 秒趋势线；
-- 网络：按活动网卡速率计算利用率百分比环，并显示 ↓/↑ MB/s 与链路速率；
-- 数据每 2 秒刷新，趋势保留 30 个采样点；链路速率取 `/api/network` 中 up 网卡的最大 `speed_mbps`。
+- CPU、内存、GPU：百分比环 + 最近 60 秒趋势线；
+- 数据每 2 秒刷新，趋势保留 30 个采样点；GPU 名称与显存用量来自 `/api/all`。
 
 ## 磁盘识别说明
 

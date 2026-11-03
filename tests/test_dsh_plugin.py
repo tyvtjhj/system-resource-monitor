@@ -60,11 +60,6 @@ class _FakeMonitorHandler(BaseHTTPRequestHandler):
                     "private_percent": 1.0, "working_set_mb": 20.0, "working_set_percent": 2.0,
                 }],
             })
-        elif path == "/api/network":
-            self._send(200, {
-                "count": 1,
-                "adapters": [{"name": "Ethernet", "up": True, "speed_mbps": 1000}],
-            })
         elif path == "/api/start":
             self._send(200, {"status": "ok", "ready": True, "elevated": False,
                              "host": "127.0.0.1", "port": 0, "platform": "windows"})
@@ -154,9 +149,6 @@ def test_dsh_host_plugin_routes_and_tool(fake_monitor):
     assert processes["payload"]["process_count"] == 42
     assert processes["payload"]["processes"][0]["name"] == "fake.exe"
 
-    network = probe["network"]
-    assert network["status"] == 200
-    assert network["payload"]["adapters"][0]["speed_mbps"] == 1000
 
 
 def test_dsh_host_plugin_reports_service_down():
