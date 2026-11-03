@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hardware Monitor · Widget</title>
+  <link rel="stylesheet" href="/widget.css">
+</head>
+<body class="hmw-page">
+  <div class="hmw-frame" id="hmw-frame">
+    <div class="hmw-head" id="hmw-head">
+      <span class="hmw-dot" id="hmw-dot"></span>
+      <span class="hmw-title">HARDWARE</span>
+      <span class="hmw-status" id="hmw-status">连接中…</span>
+      <span class="hmw-actions">
+        <button id="hmw-collapse" type="button" title="折叠 / 展开">−</button>
+        <a id="hmw-open" href="/" target="_blank" rel="noopener" title="打开完整面板">↗</a>
+        <button id="hmw-close" type="button" title="关闭">×</button>
+      </span>
+    </div>
+    <div id="widget-root"></div>
+  </div>
+  <script src="/widget-core.js"></script>
+  <script src="/widget.js"></script>
+</body>
+</html>

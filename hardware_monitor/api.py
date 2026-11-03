@@ -14,7 +14,7 @@ import time
 
 from flask import Flask, abort, jsonify, request, send_file
 
-from . import config
+from . import __version__, config
 from . import platform as platform_info
 from .collectors import common
 from .state import _snapshot, _state, _state_lock
@@ -34,12 +34,32 @@ def _token_ok():
     return hmac.compare_digest(supplied, token)
 
 
-def _serve_page(filename):
+def _add_html_headers(resp, frame_ancestors="'self'"):
+    """HTML 统一安全头：禁 referrer、禁嗅探、不缓存、限制 iframe 父页面。"""
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Security-Policy"] = f"frame-ancestors {frame_ancestors}"
+    return resp
+
+
+def _serve_page(filename, frame_ancestors="'self'"):
     path = os.path.join(config.BASE_DIR, filename)
     if not os.path.isfile(path):
         abort(404)
-    resp = send_file(path, mimetype="text/html")
+    return _add_html_headers(send_file(path, mimetype="text/html"), frame_ancestors)
+
+
+def _serve_plugin_asset(filename, mimetype):
+    """插件静态资源（js/css）；统一 no-cache 与正确的 Content-Type。"""
+    path = os.path.join(config.PLUGIN_DIR, filename)
+    if not os.path.isfile(path):
+        abort(404)
+    resp = send_file(path, mimetype=mimetype)
     resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    if mimetype.startswith("text/") or "javascript" in mimetype:
+        resp.headers["Content-Type"] = f"{mimetype}; charset=utf-8"
     return resp
 
 
@@ -85,6 +105,40 @@ def create_app():
     def desktop_page():
         """桌面版页面（此前无路由，直接 404）。"""
         return _serve_page("monitor.html")
+
+    # ---------------- 插件：集成中心 / 缩略页 / 注入脚本 / 元数据 ----------------
+    @app.route("/plugin")
+    def plugin_page():
+        """集成中心：服务状态、缩略预览、配置生成、适配器说明。"""
+        return _serve_page(os.path.join("plugin", "plugin.html"))
+
+    @app.route("/widget")
+    def widget_page():
+        """缩略监控页（iframe 嵌入用）；frame-ancestors 由 MONITOR_FRAME_ANCESTORS 控制。"""
+        return _serve_page(
+            os.path.join("plugin", "widget.html"),
+            frame_ancestors=config.FRAME_ANCESTORS,
+        )
+
+    @app.route("/plugin.css")
+    def plugin_css():
+        return _serve_plugin_asset("plugin.css", "text/css")
+
+    @app.route("/widget.css")
+    def widget_css():
+        return _serve_plugin_asset("widget.css", "text/css")
+
+    @app.route("/widget-core.js")
+    def widget_core_js():
+        return _serve_plugin_asset("widget-core.js", "application/javascript")
+
+    @app.route("/widget.js")
+    def widget_js():
+        return _serve_plugin_asset("widget.js", "application/javascript")
+
+    @app.route("/embed.js")
+    def embed_js():
+        return _serve_plugin_asset("embed.js", "application/javascript")
 
     # ---------------- 全量 / 单指标 ----------------
     @app.route("/api/all")
@@ -165,6 +219,23 @@ def create_app():
             _process_cache["data"] = data
             _process_cache["at"] = time.time()
         return jsonify(data)
+
+    @app.route("/api/plugin/manifest")
+    def api_plugin_manifest():
+        """插件元数据：名称/版本/入口/鉴权方式/平台能力。"""
+        return jsonify({
+            "name": "hardware-monitor",
+            "version": __version__,
+            "api_version": 1,
+            "base_url": request.host_url.rstrip("/"),
+            "widget_url": "/widget",
+            "dashboard_url": "/",
+            "auth": {"type": "token", "header": "X-Monitor-Token"},
+            "platform": {
+                "os": config.PLATFORM,
+                "capabilities": platform_info.capabilities(),
+            },
+        })
 
     # ---------------- 健康检查 ----------------
     @app.route("/api/start")

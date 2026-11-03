@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hardware Monitor · 集成中心</title>
+  <link rel="stylesheet" href="/plugin.css">
+</head>
+<body>
+  <div class="pm-wrap">
+    <header class="pm-header">
+      <div class="pm-title">
+        <h1>HARDWARE MONITOR</h1>
+        <p>集成中心 · 缩略组件 / 嵌入脚本 / 宿主适配</p>
+      </div>
+      <div class="pm-status">
+        <span class="pm-dot" id="pmDot"></span>
+        <span id="pmStatus">检测中…</span>
+        <a class="pm-link" href="/" target="_blank" rel="noopener">打开完整面板 ↗</a>
+      </div>
+    </header>
+
+    <section class="pm-card">
+      <h2>服务状态</h2>
+      <div class="pm-kv" id="pmMeta">
+        <div><span>平台</span><b id="pmPlatform">--</b></div>
+        <div><span>权限</span><b id="pmElevated">--</b></div>
+        <div><span>能力</span><b id="pmCaps">--</b></div>
+        <div><span>版本 / 入口</span><b id="pmManifest">--</b></div>
+      </div>
+    </section>
+
+    <section class="pm-card">
+      <h2>缩略组件预览</h2>
+      <p class="pm-hint">预览通过 <code>/embed.js</code> 挂载在下方容器内；折叠、主题、位置与嵌入脚本一致。</p>
+      <div class="pm-preview" id="pmPreviewTarget"></div>
+      <div class="pm-controls">
+        <label>主题
+          <select id="pmTheme">
+            <option value="auto">auto（跟随系统）</option>
+            <option value="light">light</option>
+            <option value="dark">dark</option>
+          </select>
+        </label>
+        <label>位置
+          <select id="pmPosition">
+            <option value="top-left">左上</option>
+            <option value="top-right">右上</option>
+            <option value="bottom-left">左下</option>
+            <option value="bottom-right">右下</option>
+          </select>
+        </label>
+        <label class="pm-check"><input type="checkbox" id="pmCollapsed"> 初始折叠</label>
+        <button type="button" id="pmApply">应用到预览</button>
+      </div>
+    </section>
+
+    <section class="pm-card">
+      <h2>生成嵌入代码</h2>
+      <div class="pm-form">
+        <label>目标选择器（留空 = 视口左上角）
+          <input type="text" id="pmTarget" placeholder="#chat-container">
+        </label>
+        <label>Token（可选，不会写入 iframe URL）
+          <input type="text" id="pmToken" placeholder="留空表示服务未启用 token">
+        </label>
+        <button type="button" id="pmGenerate">生成片段</button>
+        <button type="button" id="pmCopy">复制</button>
+      </div>
+      <textarea id="pmSnippet" rows="7" readonly></textarea>
+      <p class="pm-hint">把片段放到宿主页面的 <code>&lt;body&gt;</code> 里即可；加载后可通过 <code>window.HardwareMonitor.toggle()</code> 等 API 控制。</p>
+    </section>
+
+    <section class="pm-card">
+      <h2>宿主适配器矩阵</h2>
+      <table class="pm-table">
+        <thead>
+          <tr><th>宿主</th><th>对话区左上角</th><th>完整页面</th><th>方案</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DSH / Web / Electron</td><td>可配置</td><td>是</td><td><code>embed.js</code> + <code>data-target</code></td></tr>
+          <tr><td>DeepSeek Web / Codex Web</td><td>可配置</td><td>是</td><td>用户脚本（T5）</td></tr>
+          <tr><td>Trae / Cursor / VS Code</td><td>否（内置聊天无注入 API）</td><td>是</td><td>扩展侧边栏 / 面板 / 状态栏（T5）</td></tr>
+          <tr><td>Codex CLI</td><td>否</td><td>浏览器</td><td>状态行脚本（T5）</td></tr>
+        </tbody>
+      </table>
+      <p class="pm-hint">VS Code 系内置聊天区没有公开的 DOM 注入 API，因此不承诺“聊天框左上角”；提供侧边栏/面板/状态栏适配。</p>
+    </section>
+
+    <section class="pm-card">
+      <h2>安全提示</h2>
+      <ul class="pm-list">
+        <li>插件场景建议设置 <code>MONITOR_HOST=127.0.0.1</code>，并启用 <code>MONITOR_TOKEN</code>。</li>
+        <li>Token 只通过 <code>postMessage</code> 传递给 iframe，不会出现在 iframe URL 或 Referer 中。</li>
+        <li><code>/widget</code> 的父页面白名单由 <code>MONITOR_FRAME_ANCESTORS</code> 控制，默认仅本机；接入外部域名时显式追加。</li>
+        <li>页面统一带 <code>Referrer-Policy: no-referrer</code>、<code>X-Content-Type-Options: nosniff</code> 与 <code>frame-ancestors</code>。</li>
+      </ul>
+    </section>
+
+    <footer class="pm-foot">
+      <span>插件元数据：<a href="/api/plugin/manifest" target="_blank" rel="noopener">/api/plugin/manifest</a></span>
+      <span>缩略页：<a href="/widget" target="_blank" rel="noopener">/widget</a></span>
+    </footer>
+  </div>
+
+  <script src="/embed.js" data-auto="false"></script>
+  <script>
+    (function () {
+      'use strict';
+      var baseUrl = location.origin;
+      var preview = null;
+
+      function el(id) { return document.getElementById(id); }
+
+      function renderStatus(info) {
+        var online = !!(info && info.status === 'ok');
+        var dot = el('pmDot');
+        if (dot) dot.className = 'pm-dot ' + (online ? 'online' : 'offline');
+        if (el('pmStatus')) el('pmStatus').textContent = online ? '服务在线' : '服务离线';
+        if (el('pmPlatform')) el('pmPlatform').textContent = info.platform || '--';
+        if (el('pmElevated')) el('pmElevated').textContent = info.elevated ? '管理员' : '普通用户';
+        var caps = (info.capabilities || {});
+        if (el('pmCaps')) {
+          var parts = [];
+          if (caps.gpu_nvidia) parts.push('NVIDIA');
+          if (caps.gpu_integrated) parts.push('iGPU');
+          if (caps.physical_disk) parts.push('物理盘');
+          if (caps.network_detail) parts.push('网卡详情');
+          el('pmCaps').textContent = parts.length ? parts.join(' / ') : '--';
+        }
+        if (el('pmManifest')) {
+          el('pmManifest').textContent = info.version ? ('v' + info.version) : '--';
+        }
+      }
+
+      function fetchStatus() {
+        fetch(baseUrl + '/api/start', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+          .then(renderStatus)
+          .catch(function () { renderStatus(null); });
+      }
+
+      function fetchManifest() {
+        fetch(baseUrl + '/api/plugin/manifest', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+          .then(function (m) {
+            if (el('pmManifest')) el('pmManifest').textContent = 'v' + m.version + ' · ' + m.widget_url;
+          })
+          .catch(function () {});
+      }
+
+      function mountPreview() {
+        window.HardwareMonitor.unmount();
+        preview = window.HardwareMonitor.mount({
+          target: '#pmPreviewTarget',
+          baseUrl: baseUrl,
+          theme: el('pmTheme').value,
+          collapsed: el('pmCollapsed').checked,
+          position: 'top-left'
+        });
+      }
+
+      function generate() {
+        var target = el('pmTarget').value.trim();
+        var token = el('pmToken').value.trim();
+        var lines = ['<script src="' + baseUrl + '/embed.js"'];
+        if (target) lines.push('        data-target="' + target.replace(/"/g, '&quot;') + '"');
+        lines.push('        data-position="' + el('pmPosition').value + '"');
+        lines.push('        data-theme="' + el('pmTheme').value + '"');
+        lines.push('        data-base-url="' + baseUrl + '"');
+        if (token) lines.push('        data-token="' + token.replace(/"/g, '&quot;') + '"');
+        lines.push('        data-collapsed="' + (el('pmCollapsed').checked ? '1' : '0') + '"><\/script>');
+        el('pmSnippet').value = lines.join('\n');
+        el('pmSnippet').textContent = el('pmSnippet').value;   // 便于序列化/测试
+      }
+
+      function copySnippet() {
+        var textarea = el('pmSnippet');
+        if (!textarea.value) generate();
+        textarea.select();
+        try { document.execCommand('copy'); } catch (err) { /* ignore */ }
+        var btn = el('pmCopy');
+        if (btn) { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1200); }
+      }
+
+      window.addEventListener('load', function () {
+        fetchStatus();
+        fetchManifest();
+        mountPreview();
+        generate();
+        el('pmApply').addEventListener('click', function () { mountPreview(); generate(); });
+        el('pmGenerate').addEventListener('click', generate);
+        el('pmCopy').addEventListener('click', copySnippet);
+      });
+    })();
+  </script>
+</body>
+</html>
