@@ -113,7 +113,7 @@ if (Test-Path $applyLog) {
 # ---------------------------------------------------------------- 6. 提示
 Write-Host ""
 Write-Host "安装完成。" -ForegroundColor Green
-Write-Host "  • 对话右上角：刷新 DSH 页面（Ctrl+R）后出现 Hardware Monitor 小挂件"
+Write-Host "  • 输入框下方：刷新 DSH 页面（Ctrl+R）后出现 Hardware Monitor 小挂件"
 Write-Host "  • 工具：hardware_monitor_status（模型可直接查询）"
 Write-Host "  • 服务地址：默认 http://127.0.0.1:5678；启动 DSH 前可设置："
 Write-Host "      `$env:HARDWARE_MONITOR_URL='http://127.0.0.1:5678'"
