@@ -70,7 +70,7 @@ bash scripts/bootstrap.sh
 
 - 直接依赖写在 `requirements.in` / `requirements-dev.in`（保持 ASCII，避免中文 Windows 的 GBK 解码问题）。
 - 锁文件由 `scripts/lock-deps.ps1`（Windows）或 `scripts/lock-deps.sh`（Linux/macOS）生成：`uv pip compile --universal --python-version 3.10 ...`，保留 `sys_platform` 平台 marker，Windows/Linux 共用同一份锁。
-- 说明：pip-tools 7.6.x 的 `pip-compile` **没有** `--universal` 选项（任务书假设与实际不符），因此脚本优先用 uv；无 uv 时回退 `pip-compile`，但只能锁当前平台并会打印警告。
+- 说明：pip-tools 7.6.x 的 `pip-compile` **没有** `--universal` 选项（任务书假设与实际不符），因此锁脚本**要求安装 uv**（`pip install uv`）；缺少 uv 时脚本会拒绝执行，避免用平台锁覆盖跨平台锁、丢失 `sys_platform` marker。生成时先写临时文件并校验 uv 头与 `sys_platform` marker，通过后才替换已提交的锁文件。
 - 升级依赖的流程：改 `.in` → 运行锁脚本 → 检查 `git diff` → 提交 `requirements*.txt`。
 - 环境变量示例见 `.env.example`（程序不会自动加载）。
 - 沙箱/代理受限环境若 pip 卡住，可先设 `PIP_NO_CACHE_DIR=1`、`PIP_DISABLE_PIP_VERSION_CHECK=1` 再执行。

@@ -23,10 +23,6 @@ fail() { printf '[bootstrap][ERROR] %s\n' "$*" >&2; exit 1; }
 [ -f requirements.txt ] || fail "requirements.txt not found. Run scripts/lock-deps.sh first."
 
 find_python() {
-    if [ -n "${PYTHON:-}" ]; then
-        printf '%s\n' "$PYTHON"
-        return 0
-    fi
     local candidate
     for candidate in python3.10 python3.11 python3.12 python3; do
         if command -v "$candidate" >/dev/null 2>&1; then
@@ -39,7 +35,14 @@ find_python() {
     return 1
 }
 
-PY="$(find_python)" || fail "No Python >= 3.10 found (set PYTHON=/path/to/python to override)."
+if [ -n "${PYTHON:-}" ]; then
+    command -v "$PYTHON" >/dev/null 2>&1 || fail "PYTHON=$PYTHON not found."
+    "$PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' \
+        || fail "PYTHON=$PYTHON is not Python >= 3.10."
+    PY="$PYTHON"
+else
+    PY="$(find_python)" || fail "No Python >= 3.10 found (set PYTHON=/path/to/python to override)."
+fi
 log "Interpreter: $PY ($("$PY" -c 'import sys; print(sys.version.split()[0])'))"
 
 if [ -d .venv ]; then

@@ -6,7 +6,7 @@
   2. Python 版本（>= 3.10）与解释器路径
   3. 关键依赖的已安装版本
   4. 当前平台
-  5. 服务端口占用情况
+  5. 服务端口占用情况（被占用但不是本服务时判失败）
   6. 若服务已在运行，请求 /api/start 并打印状态
 
 用法：
@@ -95,7 +95,8 @@ def _port_in_use(host: str, port: int) -> bool:
         return False
 
 
-def _fetch_start(host: str, port: int) -> dict | None:
+def _fetch_start(host: str, port: int) -> tuple[dict | None, str]:
+    """请求 /api/start；返回 (payload, reason)。reason != "ok" 表示无法确认本服务。"""
     url = f"http://{host}:{port}/api/start"
     request = urllib.request.Request(url)
     token = os.environ.get("MONITOR_TOKEN", "").strip()
@@ -104,10 +105,17 @@ def _fetch_start(host: str, port: int) -> dict | None:
     try:
         with urllib.request.urlopen(request, timeout=2.0) as response:
             body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return None, f"HTTP {exc.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return None, f"连接失败: {exc}"
+    try:
         payload = json.loads(body)
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
-        return None
-    return payload if isinstance(payload, dict) else None
+    except ValueError:
+        return None, "响应不是 JSON（可能不是本服务）"
+    if not isinstance(payload, dict) or "status" not in payload:
+        return None, "响应缺少 status 字段（可能不是本服务）"
+    return payload, "ok"
 
 
 def _print_header() -> None:
@@ -207,9 +215,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"端口 {port}   : {'已被占用' if in_use else '空闲'}")
     print(f"探测地址   : http://{host}:{port}")
     if in_use:
-        payload = _fetch_start(host, port)
+        payload, reason = _fetch_start(host, port)
         if payload is None:
-            print("服务状态   : 端口有监听，但 /api/start 无有效响应（可能不是本服务，或 token 未通过）")
+            ok = False
+            print(f"服务状态   : 端口被占用，但 /api/start 校验失败（{reason}）")
+            print("  -> 端口可能被其他程序占用，或本服务启用了 token 而 MONITOR_TOKEN 未配置")
+            print(f"     处理：换端口（MONITOR_PORT=<其它端口>）或关闭占用 {port} 的程序后重试")
         else:
             print("服务状态   : 运行中")
             print(f"  status    = {payload.get('status')}")
