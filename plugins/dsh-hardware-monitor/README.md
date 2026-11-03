@@ -95,6 +95,14 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 `targetSelector` 由使用方按宿主实际 DOM 填写；找不到时回退视口左上角。
 外部 https 宿主需在服务端 `MONITOR_FRAME_ANCESTORS` 中显式允许其来源。
 
+## 实时可视化
+
+侧边栏面板在「物理硬盘」与「进程 Top」之间提供「实时可视化」区块：
+
+- CPU、内存：百分比环 + 最近 60 秒趋势线；
+- 网络：按活动网卡速率计算利用率百分比环，并显示 ↓/↑ MB/s 与链路速率；
+- 数据每 2 秒刷新，趋势保留 30 个采样点；链路速率取 `/api/network` 中 up 网卡的最大 `speed_mbps`。
+
 ## 磁盘识别说明
 
 - 物理盘优先用 WMI `Win32_DiskDrive`；WMI 不可用（受限 TEMP、WMI 服务异常等）时自动回退到隐藏窗口的

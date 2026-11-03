@@ -183,19 +183,98 @@ window.__ModuleLoader__.load({
       h('path', { d: 'M5.5 13.5h5', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }));
     }
 
+    function linkSpeedMbps(network) {
+      const adapters = network && Array.isArray(network.adapters) ? network.adapters : [];
+      return adapters
+        .filter((adapter) => adapter && adapter.up)
+        .reduce((max, adapter) => Math.max(max, Number(adapter.speed_mbps) || 0), 0);
+    }
+
+    function networkUsagePercent(data, network) {
+      const net = (data && data.network_speed) || {};
+      const down = Number(net.download_mbps) || 0;
+      const up = Number(net.upload_mbps) || 0;
+      const link = linkSpeedMbps(network);
+      if (!link) return null;
+      return Math.min(100, ((down + up) * 8 / link) * 100);
+    }
+
+    function PercentRing({ value, label, color, sub }) {
+      const has = value !== null && value !== undefined && Number.isFinite(Number(value));
+      const pct = has ? Math.max(0, Math.min(100, Number(value))) : 0;
+      const radius = 26;
+      const circumference = 2 * Math.PI * radius;
+      return h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 } },
+        h('svg', { viewBox: '0 0 64 64', width: 64, height: 64, 'aria-hidden': 'true', style: { flex: '0 0 auto' } },
+          h('circle', {
+            cx: 32, cy: 32, r: radius, fill: 'none',
+            stroke: 'var(--dsw-alias-bg-layer-2,#eef0f4)', strokeWidth: 7,
+          }),
+          h('circle', {
+            cx: 32, cy: 32, r: radius, fill: 'none', stroke: color, strokeWidth: 7,
+            strokeLinecap: 'round',
+            strokeDasharray: `${circumference} ${circumference}`,
+            strokeDashoffset: `${circumference * (1 - pct / 100)}`,
+            transform: 'rotate(-90 32 32)',
+          }),
+          h('text', {
+            x: 32, y: 36, textAnchor: 'middle', fontSize: 13, fontWeight: 700,
+            fill: 'var(--dsw-alias-label-primary,#1f2328)',
+          }, has ? `${fmt(pct)}%` : '--')),
+        h('div', { style: { minWidth: 0 } },
+          h('div', { style: { fontSize: '12px', fontWeight: 600 } }, label),
+          h('div', {
+            style: {
+              fontSize: '11px', color: 'var(--dsw-alias-label-secondary,#6b7280)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            },
+          }, sub || '')));
+    }
+
+    function Sparkline({ values, color }) {
+      const width = 180;
+      const height = 36;
+      const pad = 2;
+      const data = Array.isArray(values)
+        ? values.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+        : [];
+      if (data.length < 2) {
+        return h('div', {
+          style: {
+            height: `${height}px`, marginTop: '6px', fontSize: '11px',
+            color: 'var(--dsw-alias-label-secondary,#6b7280)',
+          },
+        }, '采集中…');
+      }
+      const points = data.map((value, index) => {
+        const x = (index / (data.length - 1)) * width;
+        const y = height - pad - (Math.max(0, Math.min(100, value)) / 100) * (height - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      return h('svg', {
+        viewBox: `0 0 ${width} ${height}`,
+        preserveAspectRatio: 'none',
+        style: { width: '100%', height: `${height}px`, display: 'block', marginTop: '6px' },
+      }, h('polyline', {
+        points, fill: 'none', stroke: color, strokeWidth: 1.8,
+        strokeLinejoin: 'round', strokeLinecap: 'round',
+      }));
+    }
+
     /**
      * 侧边栏「完整面板」页：原生 React 面板，不再用 iframe。
      *
      * 仪表盘页面带 `Content-Security-Policy: frame-ancestors 'self'`，DSH 的 iframe 属于
      * 不同 origin 会被浏览器拦截 → 空白。这里改为直接请求 DSH 同源代理
-     * `/hardware-monitor-api/{summary,processes}`，在宿主内渲染完整数据。
+     * `/hardware-monitor-api/{summary,processes,network}`，在宿主内渲染完整数据。
      */
     function HardwareMonitorPanel() {
       const [state, setState] = React.useState({
-        data: null, processes: null, offline: false, updatedAt: null, baseUrl: DEFAULT_BASE,
+        data: null, processes: null, network: null, offline: false, updatedAt: null, baseUrl: DEFAULT_BASE,
       });
       const [tick, setTick] = React.useState(0);
       const rootRef = React.useRef(null);
+      const historyRef = React.useRef({ cpu: [], mem: [], net: [] });
 
       React.useEffect(() => {
         let cancelled = false;
@@ -209,9 +288,10 @@ window.__ModuleLoader__.load({
             return;
           }
           try {
-            const [summaryResp, processResp] = await Promise.all([
+            const [summaryResp, processResp, networkResp] = await Promise.all([
               fetch('/hardware-monitor-api/summary', { cache: 'no-store' }),
               fetch('/hardware-monitor-api/processes', { cache: 'no-store' }).catch(() => null),
+              fetch('/hardware-monitor-api/network', { cache: 'no-store' }).catch(() => null),
             ]);
             if (!summaryResp.ok) throw new Error(`HTTP ${summaryResp.status}`);
             const summary = await summaryResp.json();
@@ -220,11 +300,30 @@ window.__ModuleLoader__.load({
             if (processResp && processResp.ok) {
               try { processes = await processResp.json(); } catch { processes = null; }
             }
+            let networkDetails = null;
+            if (networkResp && networkResp.ok) {
+              try { networkDetails = await networkResp.json(); } catch { networkDetails = null; }
+            }
             if (cancelled) return;
             failures = 0;
+            const snapshotData = summary.data || null;
+            const cpuValue = num(((snapshotData || {}).cpu || {}).usage) || 0;
+            const memValue = num(((snapshotData || {}).memory || {}).usage_percent) || 0;
+            const netPercent = networkUsagePercent(snapshotData, networkDetails);
+            const history = historyRef.current;
+            const pushHistory = (key, value) => {
+              const list = history[key];
+              if (!Array.isArray(list)) return;
+              list.push(value);
+              if (list.length > 30) list.shift();
+            };
+            pushHistory('cpu', cpuValue);
+            pushHistory('mem', memValue);
+            pushHistory('net', netPercent === null ? 0 : netPercent);
             setState({
-              data: summary.data || null,
+              data: snapshotData,
               processes,
+              network: networkDetails,
               offline: false,
               updatedAt: new Date(),
               baseUrl: summary.base_url || DEFAULT_BASE,
@@ -290,6 +389,9 @@ window.__ModuleLoader__.load({
       const download = num(network.download_mbps);
       const upload = num(network.upload_mbps);
       const latency = num(data.latency_ms);
+      const linkMbps = linkSpeedMbps(state.network);
+      const netUsage = networkUsagePercent(data, state.network);
+      const history = historyRef.current;
 
       const panelStyle = {
         height: '100%', overflowY: 'auto', padding: '16px 18px 24px', boxSizing: 'border-box',
@@ -428,6 +530,37 @@ window.__ModuleLoader__.load({
                       `${fmt(disk.free_gb, 1)} GB 可用 / ${fmt(disk.total_gb, 1)} GB · ${fmt(usage)}%`)),
                   h('div', { style: barBg }, h('div', { style: barFill(usage || 0) })));
               })),
+
+        h('div', { style: sectionStyle },
+          h('div', { style: rowStyle },
+            h('strong', {}, '实时可视化'),
+            h('span', { style: labelStyle }, '最近 60 秒')),
+          h('div', {
+            style: {
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))',
+              gap: '10px', marginTop: '10px',
+            },
+          },
+            h('div', { style: { ...cardStyle, padding: '10px 12px' } },
+              h(PercentRing, {
+                value: cpuUsage, label: 'CPU', color: '#3b82f6',
+                sub: `${fmt(cpu.count_physical)} 核 / ${fmt(cpu.count_logical)} 线程`,
+              }),
+              h(Sparkline, { values: history.cpu, color: '#3b82f6' })),
+            h('div', { style: { ...cardStyle, padding: '10px 12px' } },
+              h(PercentRing, {
+                value: memUsage, label: '内存', color: '#8b5cf6',
+                sub: `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`,
+              }),
+              h(Sparkline, { values: history.mem, color: '#8b5cf6' })),
+            h('div', { style: { ...cardStyle, padding: '10px 12px' } },
+              h(PercentRing, {
+                value: netUsage, label: '网络', color: '#10b981',
+                sub: linkMbps
+                  ? `↓${fmt(download, 1)} ↑${fmt(upload, 1)} MB/s · ${fmt(linkMbps / 1000, 1)} Gbps`
+                  : `↓${fmt(download, 1)} ↑${fmt(upload, 1)} MB/s · 链路未知`,
+              }),
+              h(Sparkline, { values: history.net, color: '#10b981' })))),
 
         h('div', { style: sectionStyle },
           h('div', { style: rowStyle },
