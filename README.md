@@ -5,7 +5,9 @@ Windows 本机的轻量硬件看板：Flask 采集 → JSON → 单页 HTML 仪�
 ## 目录结构
 
 ```
-server.py               Flask 后端 + 后台采样线程（兼容入口；T2 后改为薄包装）
+server.py               兼容入口（转发到 hardware_monitor.__main__）
+hardware_monitor/       后端包：config/state/sampler/api + collectors/ + platform/
+tests/                  pytest 测试（状态层 / API / 采集工具 / 平台能力）
 monitor-mobile.html     主页面（服务根路径 / 返回它），带 GPU 引擎侧栏、手机自适应
 monitor.html            桌面版页面（/monitor.html），无 GPU 侧栏
 lhm_temp.ps1            子进程：加载 LibreHardwareMonitor 读 CPU 内核级温度
@@ -20,6 +22,10 @@ run.bat / run-admin.bat Windows 启动脚本（优先 .venv）
 run.sh                  Linux / macOS 启动脚本
 docs/                   Code Wiki 与开发文档
 ```
+
+> T2 起后端拆分为 `hardware_monitor` 包：`platform/windows.py` 与 `platform/linux.py`
+> 提供统一接口（提权、物理盘、网卡详情、温度来源、核显、能力表），
+> `python server.py` / `run.bat` 等旧启动方式保持不变。
 
 ## 运行
 

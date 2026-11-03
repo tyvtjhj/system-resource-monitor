@@ -27,3 +27,8 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+# 只启用经典基线规则（pycodestyle 错误 + Pyflakes）；S/BLE 等安全/风格规则
+# 需要逐条评审后再逐步启用，避免一次性淹没既有降级逻辑里的 try/except。
+select = ["E4", "E7", "E9", "F"]
