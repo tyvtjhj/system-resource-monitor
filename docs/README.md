@@ -27,6 +27,7 @@
 | [T2 完成报告](T2-后端模块化与平台抽象-完成报告.md) | `hardware_monitor` 包结构、Windows/Linux 平台接口、API 变更、回归对比与测试 |
 | [T3 完成报告](T3-前端平台适配-完成报告.md) | 同源 `API_BASE`、能力降级（GPU/iGPU/温度）、`hwmon`/`thermal` 标签、平台中性文案与无头浏览器验证 |
 | [T4 完成报告](T4-通用插件与缩略组件-完成报告.md) | `/plugin`、`/widget`、`/embed.js`、`/api/plugin/manifest`、安全响应头、postMessage 握手与无头浏览器验证 |
+| [T5 完成报告](T5-宿主适配器-完成报告.md) | Web/DSH、用户脚本、VS Code 系扩展、Codex 状态行与能力矩阵 |
 
 ## 快速开始
 

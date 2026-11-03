@@ -1,0 +1,83 @@
+{
+  "name": "hardware-monitor",
+  "displayName": "Hardware Monitor",
+  "description": "本机硬件资源监控：侧边栏缩略组件 + 状态栏 CPU/内存 + 打开完整面板",
+  "version": "1.0.0",
+  "publisher": "tyvtjhj",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:hardwareMonitor.widget"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "hardwareMonitor.openDashboard",
+        "title": "Hardware Monitor: 打开完整面板"
+      },
+      {
+        "command": "hardwareMonitor.toggleWidget",
+        "title": "Hardware Monitor: 显示/隐藏侧边栏"
+      },
+      {
+        "command": "hardwareMonitor.refresh",
+        "title": "Hardware Monitor: 刷新"
+      }
+    ],
+    "configuration": {
+      "title": "Hardware Monitor",
+      "properties": {
+        "hardwareMonitor.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:5678",
+          "description": "监控服务地址（远程/Codespaces 场景填转发后的地址）"
+        },
+        "hardwareMonitor.token": {
+          "type": "string",
+          "default": "",
+          "description": "服务端 MONITOR_TOKEN（可选；不会写进 Webview URL）"
+        },
+        "hardwareMonitor.refreshInterval": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 1000,
+          "description": "轮询间隔（毫秒）"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "hardwareMonitor",
+          "title": "Hardware Monitor",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "hardwareMonitor": [
+        {
+          "type": "webview",
+          "id": "hardwareMonitor.widget",
+          "name": "缩略监控"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

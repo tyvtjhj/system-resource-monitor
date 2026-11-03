@@ -1,0 +1,8 @@
+{
+  "targetSelector": "#chat-container",
+  "position": "top-left",
+  "theme": "auto",
+  "baseUrl": "http://127.0.0.1:5678",
+  "token": "",
+  "collapsed": false
+}
