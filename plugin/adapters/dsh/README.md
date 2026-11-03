@@ -42,6 +42,13 @@ powershell -ExecutionPolicy Bypass -File .\plugin\adapters\dsh\install.ps1
 |---|---|---|
 | `HARDWARE_MONITOR_URL` | `http://127.0.0.1:5678` | 监控服务地址 |
 | `HARDWARE_MONITOR_TOKEN` | 空 | 服务端 `MONITOR_TOKEN`；启用后必须设置，否则工具/挂件显示离线 |
+| `HARDWARE_MONITOR_AUTOSTART` | `1` | 设为 `0/false` 关闭「插件自动拉起监控服务」 |
+| `HARDWARE_MONITOR_REPO` | 自动推导 | 监控仓库目录（插件不在仓库内时的兜底） |
+| `HARDWARE_MONITOR_PYTHON` | `.venv` 优先 | 指定 Python 可执行文件 |
+
+> **重启后自动恢复**：DSH 启动或插件重载时，宿主半会检测 `/api/start`；若 5678 未运行，
+> 会用仓库 `.venv\Scripts\python.exe -m hardware_monitor --no-elevate` 后台拉起（避免 UAC），
+> 并每 30 秒看门狗重试；日志见 `plugin/adapters/dsh/service.log`。
 
 挂件点击展开明细；「打开完整面板」会打开 `http://127.0.0.1:5678/`。
 若启用 token，可在 DSH 页面控制台执行下面命令，让面板链接自动带 token（仅存本机 localStorage）：

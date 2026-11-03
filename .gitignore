@@ -29,3 +29,4 @@ plugin/adapters/dsh/apply.log
 
 # 本地验证临时目录（服务日志、无头浏览器 profile 等）
 .tmp/
+plugin/adapters/dsh/service.log

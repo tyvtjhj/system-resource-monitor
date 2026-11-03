@@ -13,6 +13,7 @@ if (!baseUrl) {
 }
 
 process.env.HARDWARE_MONITOR_URL = baseUrl;
+process.env.HARDWARE_MONITOR_AUTOSTART = '0';  // 测试不拉起真实服务
 process.env.HARDWARE_MONITOR_TOKEN = process.env.HARDWARE_MONITOR_TOKEN || '';
 
 const moduleUrl = new URL('../../plugin/adapters/dsh/lib/index.js', import.meta.url);

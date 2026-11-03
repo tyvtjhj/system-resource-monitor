@@ -4,15 +4,21 @@
  * 职责：
  *   1. 注册 /hardware-monitor-api 数据通道（同源代理到本机 Hardware Monitor Flask 服务），
  *      让 DSH 渲染进程不受 CORS/混合内容影响；
- *   2. 注册 hardware_monitor_status 工具，让模型可以直接查询本机 CPU/内存/GPU/温度/网络。
+ *   2. 注册 hardware_monitor_status 工具，让模型可以直接查询本机 CPU/内存/GPU/温度/网络；
+ *   3. **自动拉起监控服务**：DSH 启动/插件重载时若 5678 未运行，用仓库 .venv 的 Python
+ *      以 --no-elevate 启动（避免 UAC 弹窗），并做 30 秒看门狗重试。
  *
  * 服务地址 / token 通过环境变量配置（在启动 DSH 的终端设置）：
- *   HARDWARE_MONITOR_URL   默认 http://127.0.0.1:5678
- *   HARDWARE_MONITOR_TOKEN 默认空（对应 MONITOR_TOKEN）
+ *   HARDWARE_MONITOR_URL       默认 http://127.0.0.1:5678
+ *   HARDWARE_MONITOR_TOKEN     默认空（对应服务端 MONITOR_TOKEN）
+ *   HARDWARE_MONITOR_AUTOSTART 设为 0/false 可关闭自动拉起
+ *   HARDWARE_MONITOR_REPO      监控仓库目录（默认从插件位置向上推导）
+ *   HARDWARE_MONITOR_PYTHON    Python 可执行文件（默认优先 .venv）
  *
  * 无外部依赖，仅用 Node 内置模块。
  */
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, openSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { request } from 'node:http'
@@ -21,6 +27,14 @@ const PLUGIN_DIR = fileURLToPath(new URL('..', import.meta.url))
 const DEFAULT_SERVICE = 'http://127.0.0.1:5678'
 const SERVICE = String(process.env.HARDWARE_MONITOR_URL || DEFAULT_SERVICE).replace(/\/+$/, '')
 const TOKEN = String(process.env.HARDWARE_MONITOR_TOKEN || '')
+const AUTOSTART = !['0', 'false', 'no', 'off'].includes(
+  String(process.env.HARDWARE_MONITOR_AUTOSTART || '1').toLowerCase(),
+)
+const WATCHDOG_MS = 30_000
+const START_COOLDOWN_MS = 15_000
+
+let starting = false
+let lastStartAt = 0
 
 function trace(message) {
   try {
@@ -29,6 +43,10 @@ function trace(message) {
   } catch {
     /* 日志失败不影响功能 */
   }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /** 请求 Flask 服务，返回 { status, data }。 */
@@ -59,6 +77,105 @@ function httpJson(path, timeoutMs = 4000) {
   })
 }
 
+async function serviceReady() {
+  try {
+    const result = await httpJson('/api/start', 1200)
+    return result.status === 200
+  } catch {
+    return false
+  }
+}
+
+/** 从插件位置向上找仓库根目录（含 server.py）。 */
+function findRepo() {
+  const candidates = [
+    process.env.HARDWARE_MONITOR_REPO,
+    fileURLToPath(new URL('../../../..', import.meta.url)),
+    'C:\\Users\\13235\\Desktop\\性能监测\\hardware-monitor-2026-11-03',
+  ].filter((item) => typeof item === 'string' && item.length > 0)
+  for (const candidate of candidates) {
+    try {
+      if (existsSync(join(candidate, 'server.py'))) return candidate
+    } catch {
+      /* 忽略不可访问目录 */
+    }
+  }
+  return ''
+}
+
+function findPython(repo) {
+  const candidates = [
+    process.env.HARDWARE_MONITOR_PYTHON,
+    repo ? join(repo, '.venv', 'Scripts', 'python.exe') : '',
+    repo ? join(repo, '.venv', 'bin', 'python') : '',
+    'python',
+  ].filter(Boolean)
+  for (const candidate of candidates) {
+    try {
+      if (candidate === 'python' || existsSync(candidate)) return candidate
+    } catch {
+      /* 忽略 */
+    }
+  }
+  return 'python'
+}
+
+/**
+ * 确保监控服务在运行：已运行直接返回；否则用 .venv Python 后台启动。
+ * 带 in-flight 去重与启动冷却，避免看门狗/客户端并发触发时重复 spawn。
+ */
+async function ensureService(reason = 'startup') {
+  if (!AUTOSTART) return { running: false, disabled: true }
+  if (await serviceReady()) return { running: true }
+
+  if (starting) return { running: false, starting: true }
+  const now = Date.now()
+  if (now - lastStartAt < START_COOLDOWN_MS) return { running: false, cooldown: true }
+
+  starting = true
+  lastStartAt = now
+  try {
+    const repo = findRepo()
+    if (!repo) {
+      trace(`autostart skipped: repo not found (reason=${reason})`)
+      return { running: false, error: 'repo not found' }
+    }
+    const python = findPython(repo)
+    const logPath = join(PLUGIN_DIR, 'service.log')
+    let logFd = 'ignore'
+    try { logFd = openSync(logPath, 'a') } catch { /* 日志不可写则丢弃 */ }
+
+    const child = spawn(python, ['-m', 'hardware_monitor', '--no-elevate'], {
+      cwd: repo,
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', logFd, logFd],
+      env: {
+        ...process.env,
+        MONITOR_NO_ELEVATE: '1',
+        ...(TOKEN ? { MONITOR_TOKEN: TOKEN } : {}),
+      },
+    })
+    child.unref()
+    trace(`autostart spawn pid=${child.pid} python=${python} repo=${repo} reason=${reason}`)
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await sleep(300)
+      if (await serviceReady()) {
+        trace(`autostart ready pid=${child.pid} after ~${(attempt + 1) * 300}ms`)
+        return { running: true, started: true, pid: child.pid }
+      }
+    }
+    trace(`autostart not ready yet pid=${child.pid}（服务继续后台启动）`)
+    return { running: false, started: true, pid: child.pid }
+  } catch (error) {
+    trace(`autostart failed: ${error?.message || error}`)
+    return { running: false, error: String(error?.message || error) }
+  } finally {
+    starting = false
+  }
+}
+
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload)
   res.writeHead(status, {
@@ -81,6 +198,8 @@ function registerDataRoutes(ctx) {
           const result = await httpJson('/api/start')
           sendJson(res, 200, { ok: result.status === 200, status: result.status, data: result.data })
         } catch (error) {
+          // 服务可能刚被关掉：后台拉起，下一次轮询即可恢复
+          void ensureService('health-route')
           sendJson(res, 503, { ok: false, error: 'service unavailable', detail: String(error?.message || error) })
         }
         return
@@ -94,6 +213,7 @@ function registerDataRoutes(ctx) {
           }
           sendJson(res, 200, { ok: true, base_url: SERVICE, data: result.data })
         } catch (error) {
+          void ensureService('summary-route')
           sendJson(res, 503, { ok: false, error: 'service unavailable', detail: String(error?.message || error) })
         }
         return
@@ -179,11 +299,12 @@ function statusTool() {
         ].join('\n')
         return { ok: true, ...s, service: SERVICE, text, snapshot: result.data }
       } catch (error) {
+        void ensureService('tool')
         return {
           ok: false,
           code: 'SERVICE_DOWN',
           message: String(error?.message || error),
-          text: `Hardware Monitor 服务不可用：${SERVICE}（先用 run.bat 启动监控服务）`,
+          text: `Hardware Monitor 服务不可用：${SERVICE}（正在尝试自动启动；也可手动运行 run.bat）`,
         }
       }
     },
@@ -193,7 +314,22 @@ function statusTool() {
 export const inject = []
 
 export function apply(ctx) {
-  trace(`apply service=${SERVICE} token=${TOKEN ? 'set' : 'empty'}`)
+  trace(`apply service=${SERVICE} token=${TOKEN ? 'set' : 'empty'} autostart=${AUTOSTART}`)
+
+  // 启动时确保监控服务在跑（DSH 重启后挂件/工具自动恢复）；失败不阻塞插件加载。
+  ensureService('dsh-startup').then((state) => {
+    trace(`startup ensure running=${state.running} started=${state.started || false} ${state.error || ''}`)
+  }).catch((error) => trace(`startup ensure failed: ${error?.message || error}`))
+
+  // 看门狗：服务被关掉后 30 秒内自动恢复（unref 不阻塞进程退出）
+  try {
+    const timer = setInterval(() => {
+      ensureService('watchdog').catch((error) => trace(`watchdog failed: ${error?.message || error}`))
+    }, WATCHDOG_MS)
+    if (typeof timer.unref === 'function') timer.unref()
+  } catch {
+    /* 忽略 */
+  }
 
   ctx.inject(['webServer'], (wsCtx) => {
     wsCtx.effect(() => registerDataRoutes(wsCtx), 'dsh-hardware-monitor: /hardware-monitor-api routes')
