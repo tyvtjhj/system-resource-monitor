@@ -220,3 +220,10 @@ GitHub 不可用时把 raw 地址换成 Gitee：
 19. **新增网络侧栏（ipconfig）**：点击 NETWORK 卡片滑出，按网卡分卡片显示 IPv4/IPv6、子网掩码、默认网关、DNS、MAC、链路速率、MTU、DHCP 与设备名。数据由 `Win32_NetworkAdapterConfiguration`（网关/DNS/DHCP）与 psutil（友好名称/速率/MTU）按 MAC + IP 关联合并，WMI 不可用时退回纯 psutil（此时无网关/DNS）。`/api/network` 带 5 秒缓存，打开时拉一次；锚点 `#network`。
 20. **CPU 温度不再依赖 FanControl**：把官方 LibreHardwareMonitor 0.9.6 的 `LibreHardwareMonitorLib.dll` 及依赖（HidSharp、System.Memory 等）放进 `vendor/lhm/`，`find_dll()` 优先用它，其次才找 FanControl / LibreHardwareMonitor 安装目录；附 `NOTICE.txt` 说明来源与 MPL-2.0 许可。同时修掉一个真实坑：把 DLL 复制到项目目录后，`Assembly.LoadFrom` 会报 `0x80131515（Operation is not supported）`，改为**按字节加载** `Assembly.Load(File.ReadAllBytes(...))` 并注册 `AssemblyResolve` 解析同目录依赖，两个位置都验证可用。
 21. **暗色模式**：页头右上角新增主题开关（亮色显示「🌙 暗色」，暗色显示「☀️ 亮色」），选择存 `localStorage`，首次访问跟随系统 `prefers-color-scheme`；`<head>` 里有一段极小脚本在首次绘制前应用主题，避免闪白。实现上把散落的写死浅色收敛成语义变量（`--track` / `--track-strong` / `--chip-good-*` / `--error-bg`），暗色只需覆盖一组变量即可同时作用于卡片、仪表底环、进度条、徽标与侧栏；另支持 `?theme=dark|light` 直接固定主题。
+
+## 许可证
+
+本项目原创代码采用 MIT 许可证，见 [LICENSE](LICENSE)。
+
+`vendor/lhm` 为 LibreHardwareMonitor 0.9.6（MPL-2.0）及其依赖，按各自上游许可分发，
+不属于 MIT 范围；详见 [vendor/lhm/NOTICE.txt](vendor/lhm/NOTICE.txt) 与 [NOTICE](NOTICE)。

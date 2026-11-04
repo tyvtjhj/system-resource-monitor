@@ -31,3 +31,6 @@ plugins/dsh-hardware-monitor/apply.log
 # 本地验证临时目录（服务日志、无头浏览器 profile 等）
 .tmp/
 plugins/dsh-hardware-monitor/service.log
+
+# 本地 UI 验收截图（正式截图放插件 assets/）
+.screenshots/

@@ -110,6 +110,16 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 - DSH 面板把「物理硬盘」和「磁盘分区」分开渲染，不会再出现 `undefined` 空条目；
 - 若仍显示「未识别到物理硬盘」，可用 `run.bat` 以管理员启动一次（部分机器的 WMI/CIM 查询需要提权）。
 
+## 截图与图标
+
+- 面板截图：`assets/screenshots/panel.png`（由 `screenshots.json` 声明，供 dsh-market 等商店展示）；
+- 图标：`assets/icon-180.png`（180×180 PNG，GitHub 托管，可用于 awesome-dsh-plugin 的 `icon` 字段）。
+
+## 许可
+
+- 本仓库原创代码：MIT（根目录 `LICENSE`）；
+- `vendor/lhm`：LibreHardwareMonitorLib 0.9.6，MPL-2.0，按原许可分发，见 `NOTICE` 与 `vendor/lhm/NOTICE.txt`。
+
 ## 限制
 
 - DSH 原生插件的 slot 依赖 DSH 版本（`conversation.session.header.corner`，回退 `conversation.composer.dock`）；

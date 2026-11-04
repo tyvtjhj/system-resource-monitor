@@ -1,0 +1,22 @@
+Third-party notices
+===================
+
+Original code in this repository is licensed under the MIT License; see the
+root LICENSE file.
+
+The MIT license above does not relicense third-party components. In
+particular:
+
+vendor/lhm/
+    LibreHardwareMonitorLib 0.9.6 (LibreHardwareMonitor), licensed under the
+    Mozilla Public License 2.0 (MPL-2.0). It is distributed unmodified as a
+    binary for CPU package temperature readings. See vendor/lhm/NOTICE.txt for
+    the exact build identity, bundled dependencies and their licenses.
+
+    Upstream: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+    MPL-2.0:  https://www.mozilla.org/en-US/MPL/2.0/
+
+If you redistribute this repository, keep vendor/lhm/NOTICE.txt and comply
+with the upstream licenses of the bundled binaries. To replace that component,
+point the MONITOR_LHM_DLL environment variable at your own
+LibreHardwareMonitorLib.dll build.
