@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用文档
+    url: https://github.com/tyvtjhj/system-resource-monitor#readme
+    about: 安装、启动、面板离线和常见问题先看 README / 使用说明
+  - name: 插件目录说明
+    url: https://github.com/tyvtjhj/system-resource-monitor/tree/main/plugins/dsh-hardware-monitor
+    about: DSH 插件安装、侧边栏面板和 hardware_monitor_status 工具说明
