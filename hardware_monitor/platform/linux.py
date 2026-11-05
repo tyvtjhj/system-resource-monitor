@@ -31,6 +31,7 @@ __all__ = [
     "network_details",
     "temperature_sources",
     "integrated_gpu",
+    "cpu_freq",
     "capabilities",
 ]
 
@@ -457,6 +458,103 @@ def integrated_gpu() -> dict | None:
     return None
 
 
+# ---------------- CPU 实时频率 ----------------
+SYS_CPU = "/sys/devices/system/cpu"
+
+
+def _parse_cpu_list(text: str) -> list[int]:
+    """解析内核的 CPU 列表写法：`0-3,8,10-11`。"""
+    result: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        start_text, _, end_text = part.partition("-")
+        if start_text.isdigit() and end_text.isdigit():
+            result.extend(range(int(start_text), int(end_text) + 1))
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
+
+def _cpu_indexes() -> list[int]:
+    """sysfs 里存在的逻辑 CPU 序号。"""
+    try:
+        names = os.listdir(SYS_CPU)
+    except OSError:
+        return []
+    return sorted(
+        int(name[3:]) for name in names
+        if name.startswith("cpu") and name[3:].isdigit()
+    )
+
+
+def _cpu_freq_khz(index: int) -> int | None:
+    """当前频率（kHz）：scaling_cur_freq 优先，cpuinfo_cur_freq 兜底。"""
+    for field in ("scaling_cur_freq", "cpuinfo_cur_freq"):
+        value = _read_int(f"{SYS_CPU}/cpu{index}/cpufreq/{field}")
+        if value and value > 0:
+            return value
+    return None
+
+
+def _cpu_base_mhz() -> float | None:
+    """标称基频（MHz）：cpufreq 的 base_frequency / cpuinfo_max_freq。"""
+    for field in ("base_frequency", "cpuinfo_max_freq"):
+        value = _read_int(f"{SYS_CPU}/cpu0/cpufreq/{field}")
+        if value and value > 0:
+            return round(value / 1000.0, 1)
+    return None
+
+
+def _physical_cores(per_core: list) -> list[dict]:
+    """按 thread_siblings_list 把逻辑核归并成物理核（同一核的超线程同频）。"""
+    groups: dict[tuple, list[int]] = {}
+    for index in range(len(per_core)):
+        siblings = _read_text(f"{SYS_CPU}/cpu{index}/topology/thread_siblings_list")
+        parsed = _parse_cpu_list(siblings) if siblings else [index]
+        groups.setdefault(tuple(sorted(parsed or [index])), []).append(index)
+
+    entries = []
+    for logical in groups.values():
+        values = [per_core[index] for index in logical if index < len(per_core) and per_core[index]]
+        entries.append({
+            "index": len(entries),
+            "label": f"C{len(entries)}",
+            "efficiency": None,
+            "logical": sorted(logical),
+            "mhz": round(max(values), 1) if values else None,
+        })
+    return entries
+
+
+def cpu_freq() -> dict | None:
+    """逐核实时频率快照；没有 cpufreq（虚拟机 / 老内核）时返回 None。"""
+    indexes = _cpu_indexes()
+    if not indexes:
+        return None
+
+    per_core: list = [None] * (indexes[-1] + 1)
+    for index in indexes:
+        khz = _cpu_freq_khz(index)
+        if khz:
+            per_core[index] = round(khz / 1000.0, 1)
+
+    present = [value for value in per_core if value]
+    if not present:
+        return None
+    return {
+        "source": "sysfs",
+        "mode": "scaling",
+        "base_mhz": _cpu_base_mhz(),
+        "avg_mhz": round(sum(present) / len(present), 1),
+        "min_mhz": round(min(present), 1),
+        "max_mhz": round(max(present), 1),
+        "per_core_mhz": per_core,
+        "physical": _physical_cores(per_core),
+    }
+
+
 # ---------------- 能力表 ----------------
 def capabilities() -> dict:
     """Linux 能力表：表示平台支持什么，不代表设备一定存在。"""
@@ -468,6 +566,7 @@ def capabilities() -> dict:
         "gpu_integrated": True,
         "physical_disk": True,
         "network_detail": True,
+        "cpu_freq_per_core": True,
         "lhm": False,
         "powershell": False,
     }

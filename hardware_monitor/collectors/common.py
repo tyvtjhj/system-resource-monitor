@@ -16,9 +16,15 @@ import psutil
 
 
 # ---------------- CPU / 内存 / 网络速率 ----------------
-def collect_cpu():
+def collect_cpu(cpu_freq_fn=None):
+    """CPU 汇总指标。
+
+    `cpu_freq_fn` 由采样层注入（`platform.cpu_freq`）：它按平台给出逐逻辑核
+    实时频率和物理核归组，本模块不直接 import platform，避免循环依赖。
+    频率读不到时只少一个 `freq` 字段，其余指标照常返回。
+    """
     freq = psutil.cpu_freq()
-    return {
+    payload = {
         "usage": round(psutil.cpu_percent(interval=None), 1),
         "per_core": [round(v, 1) for v in psutil.cpu_percent(interval=None, percpu=True)],
         "freq_current_mhz": round(freq.current, 1) if freq and freq.current else 0,
@@ -26,6 +32,19 @@ def collect_cpu():
         "count_physical": psutil.cpu_count(logical=False),
         "load_avg": os.getloadavg() if hasattr(os, "getloadavg") else None,
     }
+
+    detail = None
+    if callable(cpu_freq_fn):
+        try:
+            detail = cpu_freq_fn()
+        except Exception:  # noqa: BLE001 - 频率只是增强信息，失败不能拖垮 CPU 采集
+            detail = None
+    if isinstance(detail, dict) and detail.get("per_core_mhz"):
+        payload["freq"] = detail
+        # 卡片上的「全核频率」用逐核平均值，比 psutil 的单一读数（常是基频）更准
+        if detail.get("avg_mhz"):
+            payload["freq_current_mhz"] = detail["avg_mhz"]
+    return payload
 
 
 def collect_memory():

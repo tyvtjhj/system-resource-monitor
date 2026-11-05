@@ -8,6 +8,7 @@
     network_details() -> dict            # {"adapters": [...], "count": n}
     temperature_sources() -> list[Callable]
     integrated_gpu() -> dict | None
+    cpu_freq() -> dict | None            # 逐核实时频率（MHz）+ 物理核归组
     capabilities() -> dict
 
 Windows 之外的平台走 Linux 实现（sysfs/hwmon 方案尽力而为，能力表会如实降级）。
@@ -34,6 +35,7 @@ partition_parent = _impl.partition_parent
 network_details = _impl.network_details
 temperature_sources = _impl.temperature_sources
 integrated_gpu = _impl.integrated_gpu
+cpu_freq = _impl.cpu_freq
 
 
 def capabilities():
