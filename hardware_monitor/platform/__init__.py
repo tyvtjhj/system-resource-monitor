@@ -6,12 +6,11 @@
     subprocess_flags() -> dict
     physical_disks() -> list[dict]
     network_details() -> dict            # {"adapters": [...], "count": n}
-    temperature_sources() -> list[Callable]
     integrated_gpu() -> dict | None
     cpu_freq() -> dict | None            # 逐核实时频率（MHz）+ 物理核归组
     capabilities() -> dict
 
-Windows 之外的平台走 Linux 实现（sysfs/hwmon 方案尽力而为，能力表会如实降级）。
+Windows 之外的平台走 Linux 实现（sysfs 方案尽力而为，能力表会如实降级）。
 `capabilities()` 的 `os` 字段统一取 `config.PLATFORM`，避免 macOS 等回退实现
 出现「config.PLATFORM=other 而 capabilities.os=linux」的自相矛盾。
 """
@@ -33,7 +32,6 @@ subprocess_flags = _impl.subprocess_flags
 physical_disks = _impl.physical_disks
 partition_parent = _impl.partition_parent
 network_details = _impl.network_details
-temperature_sources = _impl.temperature_sources
 integrated_gpu = _impl.integrated_gpu
 cpu_freq = _impl.cpu_freq
 

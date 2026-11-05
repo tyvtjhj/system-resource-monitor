@@ -1,4 +1,4 @@
-"""Linux 平台适配：提权判断、物理磁盘、网卡详情、CPU 温度来源与 AMD 核显。
+"""Linux 平台适配：提权判断、物理磁盘、网卡详情与 AMD 核显。
 
 设计约束：
 - 只依赖标准库与 psutil；**在 Windows 上也能安全 import**（不使用 pwd / grp 等
@@ -8,7 +8,7 @@
 
 对外接口（与 platform/windows.py 同名同结构，由 platform/__init__.py 统一导出）：
     is_elevated, request_elevation, subprocess_flags, physical_disks,
-    network_details, temperature_sources, integrated_gpu, capabilities
+    network_details, integrated_gpu, capabilities
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import glob
 import os
 import re
 import socket
-from typing import Any, Callable
 
 import psutil
 
@@ -29,7 +28,6 @@ __all__ = [
     "parent_device",
     "partition_parent",
     "network_details",
-    "temperature_sources",
     "integrated_gpu",
     "cpu_freq",
     "capabilities",
@@ -37,7 +35,6 @@ __all__ = [
 
 # sysfs / procfs 路径常量（便于按发行版调整，也便于测试替换）
 SYS_BLOCK = "/sys/block"
-SYS_THERMAL = "/sys/class/thermal"
 SYS_DRM = "/sys/class/drm"
 PROC_ROUTE = "/proc/net/route"
 RESOLV_CONF = "/etc/resolv.conf"
@@ -52,15 +49,6 @@ _PARTITION_PATTERNS = (
     re.compile(r"^(mmcblk\d+)p\d+$"),
     re.compile(r"^([a-z]+)\d+$"),
 )
-
-# CPU 温度合理区间（摄氏度）：过滤 0、负值与明显越界的脏读数
-_MIN_TEMP = 5.0
-_MAX_TEMP = 120.0
-
-# hwmon 中常见的 CPU 芯片名（标签不规范时按芯片名兜底）
-_CPU_HWMON_CHIPS = ("coretemp", "k10temp", "zenpower", "cpu_thermal", "soc_thermal")
-# thermal zone 中 CPU 相关 type 关键字（优先命中）
-_CPU_THERMAL_KEYWORDS = ("x86_pkg_temp", "cpu", "soc")
 
 
 # ---------------- 提权 ----------------
@@ -110,19 +98,6 @@ def _read_int(path: str) -> int | None:
     except (IndexError, ValueError):
         return None
 
-
-def _plausible_temp(value: Any) -> bool:
-    """温度是否为合理读数；NaN / inf / 非数字都返回 False。"""
-    try:
-        temp = float(value)
-    except (TypeError, ValueError):
-        return False
-    return _MIN_TEMP < temp < _MAX_TEMP
-
-
-def _temp_payload(name: str, value: Any, source: str) -> dict:
-    """统一温度结构：{name, value(1 位小数), source}。"""
-    return {"name": name, "value": round(float(value), 1), "source": source}
 
 
 # ---------------- 物理硬盘 ----------------
@@ -317,68 +292,6 @@ def network_details() -> dict:
     return {"adapters": adapters, "count": len(adapters)}
 
 
-# ---------------- CPU 温度 ----------------
-def _hwmon_cpu_temp() -> dict | None:
-    """来源 1：psutil.sensors_temperatures()（hwmon），标签优先。"""
-    try:
-        if not hasattr(psutil, "sensors_temperatures"):
-            return None
-        sensors = psutil.sensors_temperatures()
-    except Exception:  # noqa: BLE001 - 部分环境不支持 / 无 hwmon
-        return None
-    if not sensors:
-        return None
-
-    readings: list[tuple[str, str, Any]] = []
-    try:
-        for chip, entries in sensors.items():
-            for entry in entries or []:
-                label = str(getattr(entry, "label", "") or "").strip()
-                readings.append((str(chip), label, getattr(entry, "current", None)))
-    except Exception:  # noqa: BLE001 - psutil 返回结构异常时降级
-        return None
-
-    # 优先标签：Intel coretemp 的 Package / Core 0，AMD k10temp 的 Tctl / Tdie
-    for wanted in ("package id 0", "tctl", "tdie", "core 0"):
-        for _chip, label, value in readings:
-            if label.lower() == wanted and _plausible_temp(value):
-                return _temp_payload(f"CPU ({label})", value, "hwmon")
-
-    # 标签不规范时按 CPU 相关芯片名兜底（如 zenpower、cpu_thermal）
-    for chip, label, value in readings:
-        if any(key in chip.lower() for key in _CPU_HWMON_CHIPS) and _plausible_temp(value):
-            return _temp_payload(f"CPU ({label or chip})", value, "hwmon")
-    return None
-
-
-def _thermal_cpu_temp() -> dict | None:
-    """来源 2：/sys/class/thermal/thermal_zone*/temp（毫摄氏度）。"""
-    try:
-        temp_paths = sorted(glob.glob(os.path.join(SYS_THERMAL, "thermal_zone*", "temp")))
-    except Exception:  # noqa: BLE001
-        return None
-
-    for temp_path in temp_paths:
-        milli = _read_int(temp_path)
-        if milli is None:
-            continue
-        value = milli / 1000.0
-        if not (_MIN_TEMP < value < _MAX_TEMP):
-            continue
-        zone_dir = os.path.dirname(temp_path)
-        zone_type = _read_text(os.path.join(zone_dir, "type")) or os.path.basename(zone_dir)
-        # 只接受 CPU 相关的热区；acpitz/nvme 等平台热区不能冒充 CPU 温度，
-        # 没有匹配时返回 None（任务书 T2.4：都没有返回 None）。
-        if any(key in zone_type.lower() for key in _CPU_THERMAL_KEYWORDS):
-            return _temp_payload(f"CPU ({zone_type})", value, "thermal")
-    return None
-
-
-def temperature_sources() -> list[Callable[[], dict | None]]:
-    """按优先级返回 CPU 温度来源：hwmon -> thermal，每个都是无参可调用对象。"""
-    return [_hwmon_cpu_temp, _thermal_cpu_temp]
-
-
 # ---------------- AMD 核显 ----------------
 def _amd_gpu_name(device_dir: str) -> str:
     """尽力从 device/uevent 推断名称，取不到时用「集成显卡」。"""
@@ -396,28 +309,12 @@ def _amd_gpu_name(device_dir: str) -> str:
     return f"AMD Radeon ({pci_id})" if pci_id else "AMD Radeon"
 
 
-def _gpu_temp(device_dir: str) -> float | None:
-    """读 amdgpu 的 hwmon temp1_input（毫摄氏度），读不到返回 None。"""
-    try:
-        paths = sorted(glob.glob(os.path.join(device_dir, "hwmon", "hwmon*", "temp1_input")))
-    except Exception:  # noqa: BLE001
-        return None
-    for path in paths:
-        milli = _read_int(path)
-        if milli is None:
-            continue
-        value = milli / 1000.0
-        if _MIN_TEMP < value < _MAX_TEMP:
-            return round(value, 1)
-    return None
-
-
 def integrated_gpu() -> dict | None:
-    """AMD 核显尽力而为：amdgpu 的利用率 / VRAM 使用量 / 温度。
+    """AMD 核显尽力而为：amdgpu 的利用率 / VRAM 使用量。
 
     读 /sys/class/drm/card*/device/gpu_busy_percent 等文件；Intel（i915 不暴露该
     文件）或无数据时返回 None。返回结构与 Windows iGPU 兼容，另外附带可选的
-    `temperature_c` 与 `vram_total_gb`（读不到就不给）。
+    `vram_total_gb`（读不到就不给）。
     """
     try:
         busy_paths = sorted(
@@ -451,9 +348,6 @@ def integrated_gpu() -> dict | None:
         }
         if total_bytes:
             info["vram_total_gb"] = round(total_bytes / 1024 ** 3, 2)
-        temp_c = _gpu_temp(device_dir)
-        if temp_c is not None:
-            info["temperature_c"] = temp_c
         return info
     return None
 
@@ -561,7 +455,6 @@ def capabilities() -> dict:
     return {
         "os": "linux",
         "elevated": is_elevated(),
-        "cpu_temp_sources": ["hwmon", "thermal"],
         "gpu_nvidia": True,
         "gpu_integrated": True,
         "physical_disk": True,

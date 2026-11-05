@@ -19,13 +19,11 @@ from hardware_monitor.platform.linux import parent_device
 CAPABILITY_KEYS = {
     "os",
     "elevated",
-    "cpu_temp_sources",
     "gpu_nvidia",
     "gpu_integrated",
     "physical_disk",
     "network_detail",
     "cpu_freq_per_core",
-    "lhm",
     "powershell",
 }
 
@@ -36,7 +34,6 @@ PLATFORM_FUNCTIONS = (
     "physical_disks",
     "partition_parent",
     "network_details",
-    "temperature_sources",
     "integrated_gpu",
     "cpu_freq",
     "capabilities",
@@ -46,7 +43,6 @@ PLATFORM_FUNCTIONS = (
 def test_capabilities_fields_and_os_consistency():
     caps = platform_info.capabilities()
     assert CAPABILITY_KEYS <= set(caps)
-    assert isinstance(caps["cpu_temp_sources"], list)
     # 回退实现（macOS 等）也必须与配置一致，不能出现 other/linux 自相矛盾
     assert caps["os"] == config.PLATFORM
 
@@ -76,11 +72,6 @@ def test_platform_package_reexports_current_platform():
     for name in PLATFORM_FUNCTIONS:
         assert callable(getattr(platform_info, name))
 
-
-def test_windows_temperature_sources_are_callables():
-    sources = windows_platform.temperature_sources()
-    assert len(sources) == 4
-    assert all(callable(source) for source in sources)
 
 
 def test_linux_subprocess_flags_empty():
