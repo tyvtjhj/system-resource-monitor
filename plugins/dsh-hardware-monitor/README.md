@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\plugins\dsh-hardware-monitor\install.
 | `HARDWARE_MONITOR_PYTHON` | `.venv` 优先 | 指定 Python 可执行文件 |
 
 > **重启后自动恢复**：DSH 启动或插件重载时，宿主半会检测 `/api/start`；若 5678 未运行，
-> 会用仓库 `.venv\Scripts\python.exe -m hardware_monitor --no-elevate` 后台拉起（避免 UAC），
+> 会用仓库 `.venv\Scripts\python.exe -m hardware_monitor` 后台拉起，
 > 并每 30 秒看门狗重试；日志见 `plugins/dsh-hardware-monitor/service.log`。
 
 挂件点击展开明细；「打开完整面板」会打开 `http://127.0.0.1:5678/`。
@@ -59,7 +59,7 @@ localStorage.setItem('hardware-monitor-token', '你的口令')
 
 ### 界面入口
 
-- **输入框下方（composer dock）**：实时小挂件（CPU/MEM/GPU/TEMP，点击向上展开明细），不再占用对话右上角；
+- **输入框下方（composer dock）**：实时小挂件（CPU/MEM/GPU，点击向上展开明细），不再占用对话右上角；
 - **侧边栏图标**：像插件市场一样在侧边栏注册入口（`sidebar.panellist`），点击后
   由宿主打开 `main(key=hardware-monitor)` 面板；面板是**原生 React 面板**（不再用 iframe），
   通过 DSH 同源代理 `/hardware-monitor-api/{summary,processes}` 渲染指标、每核占用/频率、磁盘与进程 Top，
@@ -72,7 +72,7 @@ localStorage.setItem('hardware-monitor-token', '你的口令')
 
 ### 工具
 
-`hardware_monitor_status`：返回 CPU/内存/GPU/温度/网络/开机时长，并附 `text` 供模型直接引用。
+`hardware_monitor_status`：返回 CPU/内存/GPU/网络/开机时长，并附 `text` 供模型直接引用。
 服务未启动或 token 错误时返回 `ok=false` 与原因，不会编造数据。
 
 ### 卸载
@@ -114,15 +114,13 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 - DSH 面板把「物理硬盘」和「磁盘分区」分开渲染，不会再出现 `undefined` 空条目；
 - 若仍显示「未识别到物理硬盘」，可用 `run.bat` 以管理员启动一次（部分机器的 WMI/CIM 查询需要提权）。
 
-## 截图与图标
+## 图标
 
-- 面板截图：`assets/screenshots/panel.png`（由 `screenshots.json` 声明，供 dsh-market 等商店展示）；
-- 图标：`assets/icon-180.png`（180×180 PNG，GitHub 托管，可用于 awesome-dsh-plugin 的 `icon` 字段）。
+- `assets/icon-180.png`（180×180 PNG，GitHub 托管，可用于 awesome-dsh-plugin 的 `icon` 字段）。
 
 ## 许可
 
-- 本仓库原创代码：MIT（根目录 `LICENSE`）；
-- `vendor/lhm`：LibreHardwareMonitorLib 0.9.6，MPL-2.0，按原许可分发，见 `NOTICE` 与 `vendor/lhm/NOTICE.txt`。
+本仓库原创代码采用 MIT（根目录 `LICENSE`）。
 
 ## 贡献
 

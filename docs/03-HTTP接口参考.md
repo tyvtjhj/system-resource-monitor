@@ -1,3 +1,5 @@
+> 注：该硬件指标功能已于 2026-11-05 移除；下文保留为历史归档。
+
 # 03 HTTP 接口参考
 
 服务由 Flask 提供，默认地址 `http://127.0.0.1:5678`。所有接口均为 `GET`，返回 `application/json`（页面路由返回 HTML）。
@@ -61,7 +63,6 @@ Access-Control-Allow-Methods: GET, OPTIONS
 | `GET /api/memory` | `api_memory` | `memory` | 内存 |
 | `GET /api/disk` | `api_disk` | `disk` | 磁盘 |
 | `GET /api/network-speed` | `api_network_speed` | `network_speed` | 实时速率 |
-| `GET /api/temperature` | `api_temperature` | `temperature` | 温度 |
 | `GET /api/gpu` | `api_gpu` | `gpu` | NVIDIA 独显 |
 | `GET /api/gpu-engines` | `api_gpu_engines` | `gpu_engines` | 引擎利用率 |
 | `GET /api/igpu` | `api_igpu` | `igpu` | 核显 |
@@ -84,7 +85,6 @@ Access-Control-Allow-Methods: GET, OPTIONS
 | `memory` | object | 内存指标 |
 | `network_speed` | object | 网络速率 |
 | `gpu` | object \| null | NVIDIA 独显 |
-| `temperature` | object | 温度统一结构 |
 | `disk` | array | 物理盘与分区混合 |
 | `system_info` | object | 系统信息 |
 | `igpu` | object \| null | 核显 |
@@ -136,12 +136,10 @@ Access-Control-Allow-Methods: GET, OPTIONS
     "used_gb": 1.8,
     "total_gb": 12.0
   },
-  "temperature": {
     "sensors": {
       "GPU (NVIDIA GeForce RTX 4070)": 51.0,
       "CPU (CPU Package)": 58.0
     },
-    "cpu": {"name": "CPU (CPU Package)", "value": 58.0, "source": "lhm"},
     "gpu": {"name": "GPU (NVIDIA GeForce RTX 4070)", "value": 51.0}
   },
   "disk": [
@@ -237,18 +235,15 @@ WMI 不可用时只返回分区；无介质光驱等分区会被跳过。
 | `bytes_sent_mb` / `bytes_recv_mb` | 开机以来累计发送/接收量（MiB） |
 | `packets_sent` / `packets_recv` | 累计包数 |
 
-### 3.6 `GET /api/temperature`
 
 ```json
 {
   "sensors": {"GPU (型号)": 51.0, "CPU (CPU Package)": 58.0},
-  "cpu": {"name": "CPU (CPU Package)", "value": 58.0, "source": "lhm"},
   "gpu": {"name": "GPU (型号)", "value": 51.0}
 }
 ```
 
 - `cpu` / `gpu` 可能为 `null`。
-- `cpu.source` 取值：`lhm`、`ohm`、`acpi`、`wmi`；前端据此显示 `CPU PKG` / `CPU OHM` / `CPU ACPI` / `CPU WMI`。
 - `sensors` 保留通用键值形式，包含 GPU 与 CPU 条目。
 
 ### 3.7 `GET /api/gpu`

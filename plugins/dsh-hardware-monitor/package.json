@@ -1,6 +1,6 @@
 {
   "name": "dsh-hardware-monitor",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "DSH 插件：把本机 Hardware Monitor 接入 dsh —— 侧边栏完整面板 + 输入框下方性能挂件 + hardware_monitor_status 工具",
   "type": "module",
   "main": "lib/index.js",
@@ -48,8 +48,7 @@
     "uninstall.ps1",
     "SKILL.md",
     "README.md",
-    "screenshots.json",
-    "assets/",
-    "LICENSE"
+    "LICENSE",
+    "assets/icon-180.png"
   ]
 }

@@ -25,8 +25,6 @@ SNAPSHOT = {
             "count_logical": 8, "count_physical": 4, "load_avg": None},
     "memory": {"total_gb": 16.0, "used_gb": 8.0, "available_gb": 8.0, "usage_percent": 50.0},
     "gpu": {"name": "Fake GPU", "usage": 7, "used_gb": 1.0, "total_gb": 8.0},
-    "temperature": {"sensors": {}, "cpu": {"name": "CPU (ACPI)", "value": 47.5, "source": "acpi"},
-                    "gpu": None},
     "network_speed": {"download_mbps": 1.5, "upload_mbps": 0.5, "bytes_sent_mb": 1.0,
                       "bytes_recv_mb": 2.0, "packets_sent": 1, "packets_recv": 2},
     "system_info": {"uptime": "01:00", "boot_time": "2026-11-03 10:00:00"},

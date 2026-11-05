@@ -62,7 +62,6 @@ const panelState = {
     },
     memory: { used_gb: 8.2, total_gb: 16, usage_percent: 51.2, available_gb: 7.8 },
     gpu: { name: 'Fake GPU', usage: 9, used_gb: 1.2, total_gb: 8 },
-    temperature: { cpu: { value: 47.5, source: 'acpi' }, gpu: { value: 40 } },
     network_speed: { download_mbps: 1.5, upload_mbps: 0.2 },
     system_info: { uptime: '01:00' },
     disk: [

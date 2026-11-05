@@ -83,7 +83,6 @@ pytest tests/test_dsh_client.py tests/test_dsh_plugin.py -q
 - Python 通过 `ruff`（E4/E7/E9/F）；新增逻辑尽量放在 `hardware_monitor/` 对应模块，不要在 `server.py` 堆采集逻辑；
 - 插件前端保持零构建依赖，直接改 `plugins/dsh-hardware-monitor/client.js`；改完用 `node --check`；
 - 不提交 `node_modules/`、`.venv/`、`apply.log`、`service.log`、`.tmp/` 或本机截图；
-- 不修改 `vendor/lhm/`（LibreHardwareMonitor 第三方二进制，MPL-2.0，见 `vendor/lhm/NOTICE.txt`）；
 - UI 文案以中文为主，保留深色/浅色主题、`prefers-reduced-motion` 和键盘可访问性；
 - 不要在 Issue/PR/日志里粘贴 token、密码、内网地址或完整用户名路径。
 
@@ -107,4 +106,4 @@ npm 包从 `plugins/dsh-hardware-monitor/` 发布。普通贡献者不需要发�
 
 ## 许可证
 
-原创代码采用 MIT（见 `LICENSE`）。`vendor/lhm` 等第三方组件保留各自许可（见 `NOTICE` 和 `vendor/lhm/NOTICE.txt`）。提交 PR 即表示你同意按 MIT 许可证贡献原创代码。
+原创代码采用 MIT（见 `LICENSE`）。提交 PR 即表示你同意按 MIT 许可证贡献原创代码。

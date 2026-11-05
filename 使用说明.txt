@@ -3,7 +3,7 @@
 
 一、这是什么
     一个只在本机运行的小工具：用浏览器查看 CPU、内存、磁盘、网络、
-    显卡的温度与负载。数据由本机的 server.py 采集，页面地址
+    显卡的负载。数据由本机的 server.py 采集，页面地址
     http://127.0.0.1:5678 ，不需要联网。
 
 二、运行前需要
@@ -42,11 +42,8 @@
     1. 双击 run.bat
        （run.bat 会优先使用项目 .venv，其次 py -3.10，再回退 python；
          也可以继续用  py -3.10 server.py  的老方式启动）
-    2. 弹出用户账户控制（UAC）窗口时点“是”
-       读取 CPU 核心温度需要管理员权限。不点“是”也能用，
-       只是 CPU 温度会显示为 ACPI 平台温度（比实际核心温度低不少）。
-    3. 浏览器打开  http://127.0.0.1:5678/
-    4. 手机或其它电脑访问：http://<本机IP>:5678/
+    2. 浏览器打开  http://127.0.0.1:5678/
+    3. 手机或其它电脑访问：http://<本机IP>:5678/
        首次访问会弹出 Windows 防火墙提示，选择“允许访问”。
 
 四、界面说明
@@ -63,7 +60,7 @@
     - 点 硬盘 卡片      -> 物理硬盘型号与各分区用量
     - 点 网络 卡片      -> ipconfig 信息：IP、掩码、网关、DNS、MAC、速率、DHCP
     - 点 GPU 卡片       -> NVIDIA 显卡的各引擎利用率
-    - 另有无需点击的 GPU / 核显 / 温度 / 网络速率卡片
+    - 另有无需点击的 GPU / 核显 / 网络速率卡片
     - 右上角按钮        -> 切换暗色 / 亮色
     - 页面每 2 秒自动刷新
 
@@ -71,38 +68,29 @@
     到启动时弹出的黑色窗口按 Ctrl+C，或直接关掉该窗口。
 
 六、常见问题
-    1) CPU 温度显示 “CPU ACPI”（约 27 度，明显偏低）
-       原因：没有以管理员身份运行，或缺少 PawnIO 内核驱动。
-       做法：用 run.bat 启动并在 UAC 处点“是”。
-       仍然不行时：安装 PawnIO（LibreHardwareMonitor 依赖的驱动），
-       或安装 FanControl（它自带该驱动）。
-
-    2) 提示“端口 5678 上已经有一个监控实例在运行（PID xxxx）”
+    1) 提示“端口 5678 上已经有一个监控实例在运行（PID xxxx）”
        做法：关掉旧的那个黑窗口；或者换端口启动：
 
            set MONITOR_PORT=5679 && py -3.10 server.py
 
-    3) 浏览器打不开页面
+    2) 浏览器打不开页面
        确认那个黑色窗口还开着且没有红色报错；
        地址要写 127.0.0.1，不要写 0.0.0.0。
 
-    4) 只想本机访问，不让局域网里的人看到
+    3) 只想本机访问，不让局域网里的人看到
        启动前执行：  set MONITOR_HOST=127.0.0.1
 
-    5) 想加访问口令
+    4) 想加访问口令
        启动前执行：  set MONITOR_TOKEN=你的口令
        然后打开：    http://127.0.0.1:5678/?token=你的口令
 
-    6) 提示 No module named 'flask' / 'psutil'
+    5) 提示 No module named 'flask' / 'psutil'
        回到第二步安装依赖，注意安装时用的 Python 要和启动时一致。
 
 七、文件说明
     server.py            采集服务（启动的就是它）
     monitor-mobile.html  主页面（访问 / 时返回这个）
     monitor.html         桌面版页面（/monitor.html）
-    lhm_temp.ps1         读取 CPU 核心温度的子进程脚本
-    vendor\lhm\          LibreHardwareMonitor 库及其依赖
-                         （MPL-2.0 许可，来源与校验值见其中的 NOTICE.txt）
     pyproject.toml       项目元数据与依赖声明
     requirements.in      直接依赖清单（锁文件的输入）
     requirements.txt     锁定版本的依赖清单（安装入口）
@@ -111,32 +99,31 @@
                          doctor（环境自检）
     .env.example         环境变量示例（程序不会自动加载）
     .venv/               项目虚拟环境（由 bootstrap 创建，不随压缩包分发）
-    run.bat              普通启动（会自动请求管理员权限，优先使用 .venv）
-    run-admin.bat        强制以管理员身份启动
+    run.bat              普通启动（优先使用 .venv）
     run.sh               Linux / macOS 启动脚本
     README.md            更详细的技术说明
     docs/                开发文档（架构、接口、任务书等）
 
 八、在 Linux / macOS 上运行（可选）
     完整功能以 Windows 为准；Linux 上当前支持基础指标（CPU、内存、分区、
-    网络速率、进程、系统信息），温度与显卡数据按平台能力降级。
+    网络速率、进程、系统信息），GPU 数据按平台能力降级。
     1. 安装依赖（在项目目录执行）：
            bash scripts/bootstrap.sh
     2. 启动：
            ./run.sh
-       或者直接：  .venv/bin/python server.py --no-elevate
+       或者直接：  .venv/bin/python server.py 
     3. 浏览器打开  http://127.0.0.1:5678/
     4. 环境自检：
            .venv/bin/python scripts/doctor.py
-    说明：Linux 上不会自动提权（不会调用 sudo）；读取部分传感器可能需要
-    sudo 或把用户加入相应用户组。
+    说明：Linux 不会自动提权（不会调用 sudo）；如遇权限不足，可用 sudo
+    启动或把用户加入相应用户组。
 
 九、隐私与安全提醒
     - 服务默认监听 0.0.0.0:5678，同一局域网内的其他人也能打开这个页面
       看到你的硬件信息和进程名。不需要时请按第六节第 4 条限制为本机访问。
     - 除页面字体会从 fonts.googleapis.com 拉取（离线时自动回退系统字体）之外，
       程序不会向外发送任何数据。
-    - 程序以管理员权限运行，但只读取硬件信息，不修改系统设置。
+    - 程序只读取硬件信息，不修改系统设置。
 
 十、插件与嵌入（预留）
     插件/嵌入组件属于后续版本（任务书 T3/T4/T5），当前版本尚未提供。
