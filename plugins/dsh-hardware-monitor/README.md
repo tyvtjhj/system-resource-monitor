@@ -120,6 +120,15 @@ window.DSH_HARDWARE_MONITOR_CONFIG = { targetSelector: '#chat-container', baseUr
 - 本仓库原创代码：MIT（根目录 `LICENSE`）；
 - `vendor/lhm`：LibreHardwareMonitorLib 0.9.6，MPL-2.0，按原许可分发，见 `NOTICE` 与 `vendor/lhm/NOTICE.txt`。
 
+## 贡献
+
+欢迎提交 Issue 和 PR：
+
+- 贡献指南：https://github.com/tyvtjhj/system-resource-monitor/blob/main/CONTRIBUTING.md
+- Bug / 功能建议：使用仓库的 Issue 模板；
+- 插件代码改 `plugins/dsh-hardware-monitor/`，Python 采集改 `hardware_monitor/`，PR 到 `main`；
+- npm 包从本目录发布，普通贡献者不需要处理发布。
+
 ## 限制
 
 - DSH 原生插件的 slot 依赖 DSH 版本（`conversation.session.header.corner`，回退 `conversation.composer.dock`）；
