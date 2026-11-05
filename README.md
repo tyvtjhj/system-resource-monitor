@@ -163,6 +163,10 @@ GitHub 不可用时把 raw 地址换成 Gitee：
 ## 数据来源
 
 - `psutil`：CPU 占用/频率/核心数、内存、分区用量、网卡计数、开机时间、进程与线程数
+- **CPU 逐核实时频率（Windows）**：性能计数器 `Processor Information(*,i)\Actual Frequency` 逐逻辑核采样（含睿频，与任务管理器一致），
+  缺失时用 `% Processor Performance` × 基频换算；物理核归组取自 `GetLogicalProcessorInformationEx`，Intel 大小核标 `P*`/`E*`；
+  Linux 走 `/sys/.../cpufreq/scaling_cur_freq` 与 `thread_siblings_list`。卡片显示全核平均频率，核心侧栏可在
+  「物理核心 · 频率」与「线程 · 占用」两种样式间切换（选择会记住）
 - `pynvml`（NVIDIA）：独立显卡型号、利用率、显存、温度
 - **核显（所有厂商通用）**：Windows 性能计数器 `GPU Engine(*)\Utilization Percentage` 按 LUID 汇总 3D/Compute/视频引擎，`GPU Adapter Memory` 提供共享/专用内存；核显通过「**共享内存最多的那块适配器**」识别（核显没有独立显存、用的是系统内存，独显的共享用量通常接近 0），型号名优先取 WMI `Win32_VideoController`，取不到时只在候选唯一的情况下用注册表 `DriverDesc`，否则显示「集成显卡」
 - `nvidia-smi dmon -s u`：CUDA/3D/编码/解码引擎利用率（`-q` 为兜底解析）

@@ -340,6 +340,8 @@
     }
     .sort-btn:hover { background: var(--track-strong); }
     .sort-btn.active { background: var(--accent-button); color: #fff; }
+    .sort-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .sort-btn:disabled:hover { background: var(--bg); }
 
     .proc-row { background: var(--bg); border-radius: 10px; padding: 10px 14px; }
     .proc-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
@@ -500,9 +502,13 @@
         </div>
       </div>
 
-      <hr style="margin: 24px 0; border: none; border-top: 1px solid var(--border);" />
+      <div class="sort-toggle" style="margin-top: 18px;">
+        <button class="sort-btn active" data-coreview="freq" onclick="setCoreView('freq')">物理核心 · 频率</button>
+        <button class="sort-btn" data-coreview="threads" onclick="setCoreView('threads')">线程 · 占用</button>
+      </div>
+      <div id="coreFreqSummary" class="info-label" style="margin-top: 10px; font-size: 11px; line-height: 1.5;"></div>
 
-      <h3 class="sidebar-section-title">PER-CORE LOAD HISTORY</h3>
+      <h3 class="sidebar-section-title" id="coreListTitle" style="padding: 0; margin-top: 22px;">PHYSICAL CORE FREQUENCY</h3>
       <div id="coreLoads" style="display: grid; gap: 8px;"></div>
     </div>
   </aside>
@@ -580,6 +586,13 @@
     function escapeHtml(text) {
       return String(text ?? '').replace(/[&<>"']/g,
         ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    // 频率统一按 GHz 展示（保留两位小数）；缺失时给 --，避免出现 "0.00 GHz"
+    function formatGhz(mhz) {
+      const value = Number(mhz);
+      if (!Number.isFinite(value) || value <= 0) return '--';
+      return `${(value / 1000).toFixed(2)} GHz`;
     }
 
     // 连接状态：状态点、副标题、最后更新时间、陈旧数据标记，并播报给读屏
@@ -814,11 +827,20 @@
         const physicalCores = data.cpu.count_physical || '';
         const coresLabel = physicalCores && physicalCores !== coreCount ? `${physicalCores}/${coreCount}` : coreCount;
 
-        document.getElementById('cpuBadge').textContent = `${Math.round(data.cpu.freq_current_mhz)} MHz`;
+        const freqDetail = data.cpu.freq || null;
+        const allCoreMhz = (freqDetail && freqDetail.avg_mhz) || data.cpu.freq_current_mhz;
+        const cpuBadge = document.getElementById('cpuBadge');
+        cpuBadge.textContent = formatGhz(allCoreMhz);
+        cpuBadge.title = freqDetail
+          ? `全核平均 ${formatGhz(freqDetail.avg_mhz)}，范围 ${Math.round(freqDetail.min_mhz)}–${Math.round(freqDetail.max_mhz)} MHz`
+          : '全核频率（系统单一读数）';
+        const cpuFreqRows = freqDetail
+          ? `<div class="info-row"><span class="info-label">FREQ</span><span class="info-value">${formatGhz(freqDetail.avg_mhz)}</span></div>
+             <div class="info-row"><span class="info-label">RANGE</span><span class="info-value">${Math.round(freqDetail.min_mhz)}–${Math.round(freqDetail.max_mhz)} MHz</span></div>`
+          : `<div class="info-row"><span class="info-label">FREQ</span><span class="info-value">${Math.round(data.cpu.freq_current_mhz)} MHz</span></div>`;
         document.getElementById('cpuInfo').innerHTML = `
           <div class="info-row"><span class="info-label">USAGE</span><span class="info-value">${data.cpu.usage.toFixed(1)}%</span></div>
-          <div class="info-row"><span class="info-label">CORES</span><span class="info-value">${coresLabel}</span></div>
-          <div class="info-row"><span class="info-label">FREQ</span><span class="info-value">${Math.round(data.cpu.freq_current_mhz)} MHz</span></div>`;
+          <div class="info-row"><span class="info-label">CORES</span><span class="info-value">${coresLabel}</span></div>${cpuFreqRows}`;
 
         // Re-render CPU cores sidebar if open (so it always shows latest per-core data)
         const isCoreSidebarOpen = document.getElementById('coreSidebar').classList.contains('active');
@@ -1225,25 +1247,146 @@
     }
 
     // 与逻辑核心一一对应的节点缓存：首次构建，之后只改文本和曲线，避免每 2 秒整块重建
+    // CPU 飞出的二级菜单有两种样式（选择记在 localStorage，下次打开沿用）：
+    //   freq    —— 只显示物理核心的实时频率
+    //   threads —— 不显示频率，只显示各逻辑线程的占用率曲线
+    const CORE_VIEW_KEY = 'cpuCoreView';
+    let coreView = (() => {
+      try { return localStorage.getItem(CORE_VIEW_KEY) === 'threads' ? 'threads' : 'freq'; }
+      catch (err) { return 'freq'; }   // 无痕模式 / 禁用存储时退回默认
+    })();
     let coreNodes = [];
+    let coreLayoutKey = '';
+
+    function setCoreView(view) {
+      coreView = view === 'threads' ? 'threads' : 'freq';
+      try { localStorage.setItem(CORE_VIEW_KEY, coreView); } catch (err) { /* 忽略 */ }
+      coreLayoutKey = '';   // 换样式必须重建骨架
+      if (lastCpuData) renderCoreSidebar(lastCpuData);
+    }
+
+    function hasCoreFreq(data) {
+      const perCore = data && data.cpu && data.cpu.freq && data.cpu.freq.per_core_mhz;
+      return Array.isArray(perCore) && perCore.some(value => value > 0);
+    }
+
+    /** 物理核条目：后端给了归组就用它，否则退化成「一个逻辑核一条」。 */
+    function coreFreqEntries(freq) {
+      if (Array.isArray(freq.physical) && freq.physical.length) return freq.physical;
+      return (freq.per_core_mhz || [])
+        .map((mhz, index) => ({ index, label: `C${index}`, logical: [index], mhz }))
+        .filter(entry => entry.mhz);
+    }
+
+    function buildFreqTile(entry) {
+      const tile = document.createElement('div');
+      tile.style.cssText = 'background: var(--bg); border-radius: 8px; padding: 8px 12px;';
+      if (Array.isArray(entry.logical) && entry.logical.length) {
+        tile.title = `逻辑处理器 ${entry.logical.join(' / ')}`;
+      }
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; gap:6px;';
+      const label = document.createElement('span');
+      label.style.cssText = 'font-size:12px; font-family:var(--font-mono); color:var(--text-secondary);';
+      label.textContent = entry.label || `C${entry.index}`;
+      const value = document.createElement('span');
+      value.style.cssText = 'font-size:12px; font-family:var(--font-mono); font-weight:500;';
+      value.textContent = '--';
+
+      const bar = document.createElement('div');
+      bar.style.cssText = 'height:4px; border-radius:999px; background:var(--track); overflow:hidden; margin-top:6px;';
+      const fill = document.createElement('div');
+      fill.style.cssText = 'height:100%; border-radius:999px; width:0%; background:var(--accent-blue); transition:width 0.3s ease;';
+      bar.appendChild(fill);
+
+      row.appendChild(label);
+      row.appendChild(value);
+      tile.appendChild(row);
+      tile.appendChild(bar);
+      return { tile, valueEl: value, fillEl: fill };
+    }
 
     function renderCoreSidebar(data) {
+      if (!data || !data.cpu) return;
       const coresEl = document.getElementById('coreLoads');
-      const perCoreHistory = window._corePerCoreHistory || (window._corePerCoreHistory = {});
+      if (!coresEl) return;
+
+      const cpu = data.cpu;
+      const freq = cpu.freq || null;
+      const freqReady = hasCoreFreq(data);
+      const showFreq = coreView === 'freq' && freqReady;
+
+      // 样式按钮：平台不给逐核频率时禁用「物理核心 · 频率」，并回退到线程样式
+      document.querySelectorAll('[data-coreview]').forEach(btn => {
+        const isFreq = btn.dataset.coreview === 'freq';
+        btn.disabled = isFreq && !freqReady;
+        btn.classList.toggle('active', btn.dataset.coreview === (showFreq ? 'freq' : 'threads'));
+      });
 
       // Overall load bar
       const fillBar = document.getElementById('cpuLoadBarFill');
       if (fillBar) {
-        fillBar.style.width = `${Math.min(data.cpu.usage, 100)}%`;
-        fillBar.style.backgroundColor = data.cpu.usage > 80 ? 'var(--danger-fill)' : data.cpu.usage > 60 ? 'var(--warn-fill)' : 'var(--ok-fill)';
+        fillBar.style.width = `${Math.min(cpu.usage, 100)}%`;
+        fillBar.style.backgroundColor = cpu.usage > 80 ? 'var(--danger-fill)' : cpu.usage > 60 ? 'var(--warn-fill)' : 'var(--ok-fill)';
       }
 
+      const titleEl = document.getElementById('coreListTitle');
+      const summaryEl = document.getElementById('coreFreqSummary');
       coresEl.style.display = 'grid';
-      coresEl.style.gridTemplateColumns = 'repeat(4, 1fr)';
 
-      const total = data.cpu.count_logical || 0;
-      // 核心数变化（极少见）时才重建骨架
-      if (coreNodes.length !== total) {
+      if (showFreq) {
+        const entries = coreFreqEntries(freq);
+        const peakMhz = Math.max(
+          Number(freq.max_mhz) || 0,
+          ...entries.map(entry => Number(entry.mhz) || 0),
+        );
+        // 频率值比百分比长，两列才放得下「C0  4.10 GHz」
+        coresEl.style.gridTemplateColumns = 'repeat(2, 1fr)';
+        if (titleEl) titleEl.textContent = 'PHYSICAL CORE FREQUENCY';
+        if (summaryEl) {
+          summaryEl.textContent = `全核 ${formatGhz(freq.avg_mhz)} · `
+            + `${Math.round(freq.min_mhz)}–${Math.round(freq.max_mhz)} MHz`
+            + (freq.base_mhz ? ` · 基频 ${formatGhz(freq.base_mhz)}` : '')
+            + ` · ${entries.length} 个物理核`;
+        }
+
+        const layoutKey = `freq:${entries.length}`;
+        if (coreLayoutKey !== layoutKey) {
+          coresEl.innerHTML = '';
+          coreNodes = entries.map(entry => {
+            const node = buildFreqTile(entry);
+            coresEl.appendChild(node.tile);
+            return node;
+          });
+          coreLayoutKey = layoutKey;
+        }
+        entries.forEach((entry, index) => {
+          const node = coreNodes[index];
+          if (!node) return;
+          node.valueEl.textContent = formatGhz(entry.mhz);
+          const ratio = peakMhz && entry.mhz ? Math.min(100, Math.max(3, entry.mhz / peakMhz * 100)) : 0;
+          node.fillEl.style.width = `${ratio.toFixed(1)}%`;
+        });
+        return;
+      }
+
+      // ---- 线程占用样式 ----
+      const perCoreHistory = window._corePerCoreHistory || (window._corePerCoreHistory = {});
+      const perCore = Array.isArray(cpu.per_core) ? cpu.per_core : [];
+      const total = cpu.count_logical || perCore.length;
+
+      if (titleEl) titleEl.textContent = 'PER-THREAD LOAD HISTORY';
+      if (summaryEl) {
+        summaryEl.textContent = freqReady
+          ? '各逻辑线程的占用率曲线；切到另一种样式可看物理核心频率'
+          : '当前平台 / 权限下读不到逐核频率，已显示线程占用';
+      }
+
+      const layoutKey = `threads:${total}`;
+      // 线程数 / 样式变化时才重建骨架
+      if (coreLayoutKey !== layoutKey) {
+        coresEl.style.gridTemplateColumns = 'repeat(4, 1fr)';
         coresEl.innerHTML = '';
         coreNodes = [];
         for (let i = 0; i < total; i++) {
@@ -1254,7 +1397,9 @@
           labelRow.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
           const coreLabel = document.createElement('span');
           coreLabel.style.cssText = 'font-size:12px; font-family:var(--font-mono); color:var(--text-secondary);';
-          coreLabel.textContent = `Core ${i}`;
+          // 四列布局下 "Thread 12" 会换行盖住数值，用 T12 紧凑写法 + 悬停说明
+          coreLabel.textContent = `T${i}`;
+          cardWrap.title = `线程 ${i}（逻辑处理器 ${i}）`;
           const valLabel = document.createElement('span');
           valLabel.style.cssText = 'font-size:12px; font-family:var(--font-mono); font-weight:500;';
           valLabel.textContent = '--%';
@@ -1269,18 +1414,20 @@
           coresEl.appendChild(cardWrap);
           coreNodes.push({ valLabel, canvas });
         }
+        coreLayoutKey = layoutKey;
       }
 
       for (let i = 0; i < total; i++) {
         if (!perCoreHistory[i]) perCoreHistory[i] = [];
-        const hasValue = i < data.cpu.per_core.length;
-        const value = hasValue ? Math.min(data.cpu.per_core[i], 100) : null;
+        const hasValue = i < perCore.length;
+        const value = hasValue ? Math.min(perCore[i], 100) : null;
         if (value !== null) {
           perCoreHistory[i].push(value);
           // 保留最近 37 个采样点（约 74 秒）
           if (perCoreHistory[i].length > 37) perCoreHistory[i] = perCoreHistory[i].slice(-37);
         }
         const node = coreNodes[i];
+        if (!node) continue;
         node.valLabel.textContent = value === null ? '--%' : `${Math.round(value)}%`;
         drawCoreSparkline(node.canvas, perCoreHistory[i], value);
       }

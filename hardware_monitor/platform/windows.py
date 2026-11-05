@@ -203,6 +203,313 @@ def partition_parent(device):
     return None
 
 
+# ---------------- CPU 实时频率（逐逻辑核 + 物理核归组） ----------------
+# 物理核拓扑基本不变，成功读到后缓存 5 分钟，避免每秒都调一次 ctypes。
+_TOPOLOGY_CACHE = {"at": 0.0, "data": None}
+
+
+def _logical_core_topology():
+    """物理核 → 逻辑处理器映射：`[{"logical": [0, 8], "efficiency": 1}, ...]`。
+
+    `efficiency` 是 Windows 的 EfficiencyClass（越大越强），Intel 大小核机器上
+    P 核与 E 核不同；AMD / 老 Intel 全核相同。取不到时返回 `[]`，前端退回按
+    逻辑核展示，不影响其余功能。
+    """
+    now = time.time()
+    cached = _TOPOLOGY_CACHE["data"]
+    if cached is not None and now - _TOPOLOGY_CACHE["at"] < 300:
+        return cached
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except Exception:  # noqa: BLE001 - 非 Windows / ctypes 缺失
+        _TOPOLOGY_CACHE.update(at=now, data=[])
+        return []
+
+    relation_processor_core = 0
+    try:
+        kernel32 = ctypes.windll.kernel32
+        length = wintypes.DWORD(0)
+        kernel32.GetLogicalProcessorInformationEx(
+            relation_processor_core, None, ctypes.byref(length))
+        if not length.value:
+            _TOPOLOGY_CACHE.update(at=now, data=[])
+            return []
+        buffer = ctypes.create_string_buffer(length.value)
+        if not kernel32.GetLogicalProcessorInformationEx(
+                relation_processor_core, buffer, ctypes.byref(length)):
+            _TOPOLOGY_CACHE.update(at=now, data=[])
+            return []
+        raw = buffer.raw[:length.value]
+    except Exception:  # noqa: BLE001
+        _TOPOLOGY_CACHE.update(at=now, data=[])
+        return []
+
+    ptr = ctypes.sizeof(ctypes.c_void_p)   # KAFFINITY 宽度：x64=8 / x86=4
+    group_affinity = ptr + 8               # GROUP_AFFINITY: Mask + Group(2) + Reserved(6)
+    # PROCESSOR_RELATIONSHIP: Flags(1) EfficiencyClass(1) Reserved(20) GroupCount(2) 后面才是掩码
+    mask_offset = 32
+
+    cores = []
+    offset = 0
+    while offset + 8 <= len(raw):
+        relationship = int.from_bytes(raw[offset:offset + 4], "little")
+        size = int.from_bytes(raw[offset + 4:offset + 8], "little")
+        if size < 8 or offset + size > len(raw):
+            break
+        entry = raw[offset:offset + size]
+        if relationship == relation_processor_core and size >= mask_offset + group_affinity:
+            efficiency = entry[9]
+            group_count = int.from_bytes(entry[30:32], "little")
+            logical = []
+            pos = mask_offset
+            for _ in range(group_count):
+                if pos + group_affinity > len(entry):
+                    break
+                mask = int.from_bytes(entry[pos:pos + ptr], "little")
+                group = int.from_bytes(entry[pos + ptr:pos + ptr + 2], "little")
+                pos += group_affinity
+                for bit in range(ptr * 8):
+                    if mask >> bit & 1:
+                        logical.append(group * 64 + bit)
+            if logical:
+                cores.append({"logical": sorted(logical), "efficiency": efficiency})
+        offset += size
+
+    _TOPOLOGY_CACHE.update(at=now, data=cores)
+    return cores
+
+
+def _physical_core_entries(per_core_mhz):
+    """把逐逻辑核频率归并成物理核条目；没有拓扑信息时返回 `[]`。
+
+    同一个物理核上的超线程共享执行单元，频率取两个线程中的较大值更贴近
+    任务管理器的读数（空闲线程可能报 0）。
+    """
+    topology = _logical_core_topology()
+    if not topology:
+        return []
+    classes = sorted({core["efficiency"] for core in topology}, reverse=True)
+    hybrid = len(classes) > 1
+    counters = {}
+    entries = []
+    for core in topology:
+        logical = [index for index in core["logical"] if 0 <= index < len(per_core_mhz)]
+        values = [per_core_mhz[index] for index in logical if per_core_mhz[index]]
+        if not logical:
+            continue
+        prefix = "C"
+        if hybrid:
+            prefix = "P" if core["efficiency"] == classes[0] else "E"
+        counters[prefix] = counters.get(prefix, 0) + 1
+        entries.append({
+            "index": len(entries),
+            "label": f"{prefix}{counters[prefix] - 1}",
+            "efficiency": core["efficiency"],
+            "logical": logical,
+            "mhz": round(max(values), 1) if values else None,
+        })
+    return entries
+
+
+class CpuFreqReader:
+    """逐逻辑核实时频率（MHz），数据源是性能计数器 `Processor Information(*,i)`。
+
+    - `Actual Frequency`：当前实际频率（含睿频），与任务管理器「速度」一致；
+    - 该计数器缺失时退回 `% Processor Performance`（相对基频的百分比）× 基频；
+    - 实例名形如 `0,3`：0 是处理器组、3 是组内逻辑处理器序号。
+    """
+
+    OBJECT = "Processor Information"
+    COUNTER_ACTUAL = "Actual Frequency"
+    COUNTER_PERFORMANCE = "% Processor Performance"
+    COUNTER_BASE = "Processor Frequency"
+
+    def __init__(self, refresh=30.0, retry_after=60.0):
+        self._lock = threading.Lock()
+        self._refresh = refresh
+        self._retry_after = retry_after
+        self._query = None
+        self._handles = []
+        self._mode = None
+        self._base_mhz = 0.0
+        self._built_at = 0.0
+        self._failed_at = 0.0
+
+    def _close(self):
+        query, self._query = self._query, None
+        self._handles = []
+        self._mode = None
+        if query is not None:
+            try:
+                import win32pdh
+                win32pdh.CloseQuery(query)
+            except Exception:  # noqa: BLE001
+                pass
+
+    @classmethod
+    def _read_base_mhz(cls, win32pdh, instance):
+        """基频：`Processor Frequency` 计数器；读不到时退回 psutil 的最大频率。"""
+        try:
+            query = win32pdh.OpenQuery()
+            try:
+                path = win32pdh.MakeCounterPath(
+                    (None, cls.OBJECT, instance, None, 0, cls.COUNTER_BASE))
+                handle = win32pdh.AddCounter(query, path)
+                win32pdh.CollectQueryData(query)
+                _, value = win32pdh.GetFormattedCounterValue(handle, win32pdh.PDH_FMT_DOUBLE)
+                if value and value > 0:
+                    return round(float(value), 1)
+            finally:
+                try:
+                    win32pdh.CloseQuery(query)
+                except Exception:  # noqa: BLE001
+                    pass
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            import psutil
+            freq = psutil.cpu_freq()
+            if freq and freq.max:
+                return round(float(freq.max), 1)
+        except Exception:  # noqa: BLE001
+            pass
+        return 0.0
+
+    def _build(self):
+        try:
+            import win32pdh
+        except Exception:  # noqa: BLE001 - 没装 pywin32 时静默降级
+            return False
+        try:
+            items, instances = win32pdh.EnumObjectItems(
+                None, None, self.OBJECT, win32pdh.PERF_DETAIL_WIZARD)
+        except Exception:  # noqa: BLE001
+            return False
+
+        if self.COUNTER_ACTUAL in items:
+            mode = "actual"
+        elif self.COUNTER_PERFORMANCE in items:
+            mode = "performance"
+        else:
+            return False
+        counter = self.COUNTER_ACTUAL if mode == "actual" else self.COUNTER_PERFORMANCE
+
+        cores = []
+        for name in instances:
+            group_text, _, index_text = name.partition(",")
+            if not group_text.isdigit() or not index_text.isdigit():
+                continue
+            cores.append((int(group_text), int(index_text), name))
+        if not cores:
+            return False
+        cores.sort()
+
+        query = win32pdh.OpenQuery()
+        handles = []
+        try:
+            for group, index, name in cores:
+                path = win32pdh.MakeCounterPath((None, self.OBJECT, name, None, 0, counter))
+                handles.append((group * 64 + index, win32pdh.AddCounter(query, path)))
+        except Exception:  # noqa: BLE001
+            try:
+                win32pdh.CloseQuery(query)
+            except Exception:  # noqa: BLE001
+                pass
+            return False
+
+        self._query = query
+        self._handles = handles
+        self._mode = mode
+        # 基频只在建表时读一次：performance 模式要用它换算频率，actual 模式只用于展示
+        self._base_mhz = CpuFreqReader._read_base_mhz(win32pdh, cores[0][2])
+        self._built_at = time.time()
+        return True
+
+    def _read_values(self):
+        import win32pdh
+        win32pdh.CollectQueryData(self._query)
+
+        def read_all():
+            values = []
+            for _, handle in self._handles:
+                _, value = win32pdh.GetFormattedCounterValue(handle, win32pdh.PDH_FMT_DOUBLE)
+                values.append(value)
+            return values
+
+        try:
+            values = read_all()
+        except Exception:  # noqa: BLE001 - 部分计数器首轮无数据，补采一次
+            time.sleep(0.05)
+            win32pdh.CollectQueryData(self._query)
+            values = read_all()
+
+        if self._mode == "performance":
+            if not self._base_mhz:
+                return []
+            return [value * self._base_mhz / 100.0 for value in values]
+        return values
+
+    def sample(self):
+        """返回频率快照；本机读不到时返回 None。"""
+        with self._lock:
+            now = time.time()
+            if self._query is None:
+                if now - self._failed_at < self._retry_after:
+                    return None
+                if not self._build():
+                    self._failed_at = now
+                    return None
+            elif now - self._built_at > self._refresh:
+                self._close()
+                if not self._build():
+                    self._failed_at = now
+                    return None
+            try:
+                values = self._read_values()
+            except Exception:  # noqa: BLE001
+                self._close()
+                self._failed_at = now
+                return None
+            if len(values) != len(self._handles):
+                self._close()
+                return None
+            ids = [logical for logical, _ in self._handles]
+
+        per_core = [None] * (max(ids) + 1 if ids else 0)
+        for logical, value in zip(ids, values):
+            per_core[logical] = round(float(value), 1) if value and value > 0 else None
+
+        present = [value for value in per_core if value]
+        if not present:
+            return None
+        return {
+            "source": "pdh",
+            "mode": self._mode,
+            "base_mhz": self._base_mhz or None,
+            "avg_mhz": round(sum(present) / len(present), 1),
+            "min_mhz": round(min(present), 1),
+            "max_mhz": round(max(present), 1),
+            "per_core_mhz": per_core,
+            "physical": _physical_core_entries(per_core),
+        }
+
+
+_cpu_freq_reader = None
+_cpu_freq_lock = threading.Lock()
+
+
+def cpu_freq():
+    """逐核实时频率快照；读不到（非 Windows / 未装 pywin32 / 计数器缺失）返回 None。"""
+    global _cpu_freq_reader
+    with _cpu_freq_lock:
+        if _cpu_freq_reader is None:
+            _cpu_freq_reader = CpuFreqReader()
+        reader = _cpu_freq_reader
+    return reader.sample()
+
+
 # ---------------- 核显（GPU 性能计数器） ----------------
 class GpuPerfReader:
     """用 Windows 的 GPU 性能计数器读取核显数据（所有厂商通用，不依赖 NVML）。
@@ -889,6 +1196,7 @@ def capabilities():
         "gpu_integrated": True,
         "physical_disk": True,
         "network_detail": True,
+        "cpu_freq_per_core": True,
         "lhm": bool(LhmReader.find_dll()),
         "powershell": True,
     }

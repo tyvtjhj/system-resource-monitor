@@ -41,7 +41,7 @@ def sampler_loop():
     while not _stop.is_set():
         cycle_started = time.time()
         try:
-            collect("cpu", common.collect_cpu)
+            collect("cpu", common.collect_cpu, platform_info.cpu_freq)
             collect("memory", common.collect_memory)
 
             cur_counters = psutil.net_io_counters()

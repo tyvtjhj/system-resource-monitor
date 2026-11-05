@@ -20,7 +20,11 @@ def test_api_all_contains_core_fields_and_platform(client):
 def test_single_metric_returns_value(client):
     resp = client.get("/api/cpu")
     assert resp.status_code == 200
-    assert resp.get_json()["usage"] == 12.3
+    body = resp.get_json()
+    assert body["usage"] == 12.3
+    # 逐核频率随 CPU 指标一起下发（前端据此画「物理核心 · 频率」样式）
+    assert body["freq"]["avg_mhz"] == 3900.0
+    assert body["freq"]["physical"][0]["logical"] == [0, 1]
 
 
 def test_single_metric_missing_returns_503(client):

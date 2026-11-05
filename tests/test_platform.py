@@ -1,4 +1,4 @@
-"""平台层测试：能力表、平台选择、统一接口、Linux 分区->父设备映射。
+﻿"""平台层测试：能力表、平台选择、统一接口、Linux 分区->父设备映射。
 
 这些用例在 Windows / Linux / macOS 上都必须能通过（跨平台断言按 sys.platform 分支）。
 """
@@ -24,6 +24,7 @@ CAPABILITY_KEYS = {
     "gpu_integrated",
     "physical_disk",
     "network_detail",
+    "cpu_freq_per_core",
     "lhm",
     "powershell",
 }
@@ -37,6 +38,7 @@ PLATFORM_FUNCTIONS = (
     "network_details",
     "temperature_sources",
     "integrated_gpu",
+    "cpu_freq",
     "capabilities",
 )
 
@@ -140,3 +142,62 @@ def test_windows_cim_physical_disk_fallback(monkeypatch):
         "serial_number": "SN123",
         "type": "physical",
     }]
+
+
+# ---------------- CPU 逐核频率 ----------------
+def test_parse_cpu_list_ranges():
+    assert linux_platform._parse_cpu_list("0-3,8,10-11") == [0, 1, 2, 3, 8, 10, 11]
+    assert linux_platform._parse_cpu_list("") == []
+    assert linux_platform._parse_cpu_list(" 5 ") == [5]
+
+
+def test_linux_cpu_freq_without_sysfs_returns_none(monkeypatch):
+    monkeypatch.setattr(linux_platform, "_cpu_indexes", lambda: [])
+    assert linux_platform.cpu_freq() is None
+
+
+def test_linux_cpu_freq_builds_payload(monkeypatch):
+    monkeypatch.setattr(linux_platform, "_cpu_indexes", lambda: [0, 1, 2, 3])
+    monkeypatch.setattr(linux_platform, "_cpu_freq_khz", {0: 3_900_000, 1: 4_100_000}.get)
+    monkeypatch.setattr(linux_platform, "_cpu_base_mhz", lambda: 3600.0)
+
+    def siblings(path):
+        index = int(path.split("/cpu/cpu")[1].split("/")[0])
+        return "0-1" if index in (0, 1) else "2-3"
+
+    monkeypatch.setattr(linux_platform, "_read_text", siblings)
+
+    data = linux_platform.cpu_freq()
+
+    assert data["source"] == "sysfs"
+    assert data["per_core_mhz"] == [3900.0, 4100.0, None, None]
+    assert data["avg_mhz"] == 4000.0
+    assert data["max_mhz"] == 4100.0
+    assert [entry["logical"] for entry in data["physical"]] == [[0, 1], [2, 3]]
+
+
+def test_windows_physical_core_entries_group_siblings(monkeypatch):
+    topology = [
+        {"logical": [0, 8], "efficiency": 1},
+        {"logical": [1, 9], "efficiency": 1},
+        {"logical": [2], "efficiency": 0},
+    ]
+    monkeypatch.setattr(windows_platform, "_logical_core_topology", lambda: topology)
+    per_core = [4000.0, 4100.0, 4200.0, None, None, None, None, None, 3000.0, None]
+
+    entries = windows_platform._physical_core_entries(per_core)
+
+    # 有大小核差异时按 EfficiencyClass 标 P/E，同一物理核取两个线程中的较大值
+    assert [entry["label"] for entry in entries] == ["P0", "P1", "E0"]
+    assert entries[0]["logical"] == [0, 8]
+    assert entries[0]["mhz"] == 4000.0
+    assert entries[1]["mhz"] == 4100.0
+
+
+def test_windows_physical_core_entries_without_topology(monkeypatch):
+    monkeypatch.setattr(windows_platform, "_logical_core_topology", lambda: [])
+    assert windows_platform._physical_core_entries([4000.0]) == []
+
+
+def test_capabilities_marks_per_core_frequency():
+    assert platform_info.capabilities()["cpu_freq_per_core"] is True

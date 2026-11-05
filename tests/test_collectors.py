@@ -185,3 +185,46 @@ def test_psutil_network_adapters(monkeypatch):
     assert eth["gateway"] == []
     assert eth["dhcp"] is None
     assert eth["up"] is True
+
+
+# ---------------- CPU：逐核频率合并 ----------------
+def test_collect_cpu_merges_frequency_detail(monkeypatch):
+    monkeypatch.setattr(common.psutil, "cpu_freq",
+                        lambda: SimpleNamespace(current=2304.0, min=0.0, max=2304.0))
+    monkeypatch.setattr(common.psutil, "cpu_percent",
+                        lambda interval=None, percpu=False: [10.0, 20.0] if percpu else 15.0)
+    monkeypatch.setattr(common.psutil, "cpu_count", lambda logical=True: 2 if logical else 1)
+
+    detail = {
+        "source": "pdh",
+        "avg_mhz": 3900.0,
+        "min_mhz": 3800.0,
+        "max_mhz": 4100.0,
+        "per_core_mhz": [3900.0, 3900.0],
+        "physical": [{"index": 0, "label": "C0", "logical": [0, 1], "mhz": 3900.0}],
+    }
+    out = common.collect_cpu(lambda: detail)
+
+    assert out["freq"] is detail
+    # 卡片上的全核频率改用逐核平均值，而不是 psutil 的单一读数
+    assert out["freq_current_mhz"] == 3900.0
+    assert out["per_core"] == [10.0, 20.0]
+
+
+def test_collect_cpu_without_frequency_stays_compatible():
+    out = common.collect_cpu(lambda: None)
+    assert "freq" not in out
+    assert out["freq_current_mhz"] >= 0
+
+    # 逐核为空（平台不支持）时也不挂 freq 字段，前端按旧逻辑展示
+    empty = common.collect_cpu(lambda: {"per_core_mhz": [], "avg_mhz": 0})
+    assert "freq" not in empty
+
+
+def test_collect_cpu_survives_frequency_error():
+    def boom():
+        raise RuntimeError("pdh unavailable")
+
+    out = common.collect_cpu(boom)
+    assert "freq" not in out
+    assert "usage" in out

@@ -99,10 +99,22 @@ Access-Control-Allow-Methods: GET, OPTIONS
   "cpu": {
     "usage": 12.4,
     "per_core": [8.0, 15.2, 3.1, 22.8],
-    "freq_current_mhz": 3600.0,
+    "freq_current_mhz": 3902.5,
     "count_logical": 16,
     "count_physical": 8,
-    "load_avg": null
+    "load_avg": null,
+    "freq": {
+      "source": "pdh",
+      "mode": "actual",
+      "base_mhz": 2304.0,
+      "avg_mhz": 3902.5,
+      "min_mhz": 3525.9,
+      "max_mhz": 4173.5,
+      "per_core_mhz": [3790.5, 3967.2, 4084.5, 3924.3],
+      "physical": [
+        {"index": 0, "label": "C0", "efficiency": 0, "logical": [0, 1], "mhz": 3967.2}
+      ]
+    }
   },
   "memory": {
     "total_gb": 31.9,
@@ -183,10 +195,25 @@ Access-Control-Allow-Methods: GET, OPTIONS
 |---|---|---|
 | `usage` | number | 总占用百分比 |
 | `per_core` | number[] | 每逻辑核心占用 |
-| `freq_current_mhz` | number | 当前频率；取不到为 0 |
+| `freq_current_mhz` | number | 全核频率（逐核平均值，见 `freq.avg_mhz`）；读不到逐核频率时退回 psutil 单一读数，取不到为 0 |
 | `count_logical` | number | 逻辑核心数 |
 | `count_physical` | number | 物理核心数 |
 | `load_avg` | number[] \| null | 仅类 Unix 系统有值 |
+| `freq` | object \| 缺失 | 逐核实时频率；平台读不到时整个字段不出现 |
+
+`freq` 子字段：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `source` | string | `pdh`（Windows 性能计数器）/ `sysfs`（Linux cpufreq） |
+| `mode` | string | `actual`（直接读实际频率）/ `performance`（`% Processor Performance` × 基频） |
+| `base_mhz` | number \| null | 标称基频 |
+| `avg_mhz` / `min_mhz` / `max_mhz` | number | 全核平均 / 最低 / 最高 |
+| `per_core_mhz` | (number \| null)[] | 按逻辑处理器序号索引的单核频率 |
+| `physical` | object[] | 物理核归组：`index`、`label`（`C0` / `P0` / `E0`）、`efficiency`、`logical`、`mhz` |
+
+`physical` 里的 `label` 在 Intel 大小核机器上是 `P*`（性能核）/ `E*`（能效核），其余机器是 `C*`；
+`logical` 是该物理核包含的逻辑处理器序号（超线程的两个线程同属一条）。
 
 ### 3.3 `GET /api/memory`
 
