@@ -187,12 +187,10 @@
   }
 
   function fallbackRender(data) {
-    var temp = (data.temperature && (data.temperature.cpu || data.temperature.gpu)) || {};
     var values = [
       ['CPU', data.cpu ? data.cpu.usage + '%' : '--'],
       ['MEM', data.memory ? data.memory.usage_percent + '%' : '--'],
       ['GPU', data.gpu ? data.gpu.usage + '%' : '--'],
-      ['TEMP', temp.value != null ? temp.value + ' °C' : '--'],
       ['DOWN', data.network_speed ? data.network_speed.download_mbps + ' MB/s' : '--'],
       ['UP', data.network_speed ? data.network_speed.upload_mbps + ' MB/s' : '--']
     ];

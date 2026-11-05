@@ -21,7 +21,6 @@
     { key: 'cpu', label: 'CPU', unit: '%', digits: 0, thresholds: true },
     { key: 'mem', label: 'MEM', unit: '%', digits: 0, thresholds: true },
     { key: 'gpu', label: 'GPU', unit: '%', digits: 0, thresholds: true },
-    { key: 'temp', label: 'TEMP', unit: '°C', digits: 1, thresholds: true },
     { key: 'down', label: 'DOWN', unit: 'MB/s', digits: 1, thresholds: false },
     { key: 'up', label: 'UP', unit: 'MB/s', digits: 1, thresholds: false }
   ];
@@ -96,14 +95,10 @@
 
   Widget.prototype.render = function (data) {
     data = data || {};
-    var temp = data.temperature || {};
-    var cpu = temp.cpu || null;
-    var gpu = temp.gpu || null;
     var values = {
       cpu: data.cpu ? data.cpu.usage : null,
       mem: data.memory ? data.memory.usage_percent : null,
       gpu: data.gpu ? data.gpu.usage : null,
-      temp: cpu && cpu.value != null ? cpu.value : (gpu && gpu.value != null ? gpu.value : null),
       down: data.network_speed ? data.network_speed.download_mbps : null,
       up: data.network_speed ? data.network_speed.upload_mbps : null
     };

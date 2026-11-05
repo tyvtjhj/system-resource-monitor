@@ -412,7 +412,7 @@
       </div>
     </div>
 
-    <!-- Row 2: Network + GPU + Temp -->
+    <!-- Row 2: Network + GPU -->
     <div class="grid-3">
       <div class="card" onclick="openNetSidebar()" style="cursor: pointer;">
         <div class="card-header"><span class="card-title">NETWORK</span><span class="badge">Mbps</span></div>
@@ -434,15 +434,6 @@
         <div class="card-header"><span class="card-title">iGPU</span><span class="badge" id="igpuBadge">--%</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="igpuGauge"></svg></div>
         <div id="igpuInfo"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><span class="card-title">TEMPERATURE</span><span class="badge" id="tempBadge">--°C AVG</span></div>
-        <canvas class="sparkline" id="tempSparkline"></canvas>
-        <div style="display:flex; gap:24px; margin-top:16px;">
-          <div><span class="info-label"><span class="legend-dot" style="background:#3b82f6"></span><span id="cpuTempLabel">CPU</span></span><br/><span class="info-value" id="cpuTemp">--°C</span></div>
-          <div><span class="info-label"><span class="legend-dot" style="background:#ef4444"></span>GPU</span><br/><span class="info-value" id="gpuTemp">--°C</span></div>
-        </div>
       </div>
 
     </div>
@@ -721,8 +712,6 @@
 
     // ---- SPARKLINE INSTANCES ----
     const netSL = new Sparkline('netSparkline', '#3b82f6');
-    // CPU 蓝 / GPU 红，与下方数值的图例颜色一致
-    const tempSL = new Sparkline('tempSparkline', ['#3b82f6', '#ef4444']);
 
     async function fetchAll() {
       try {
@@ -914,44 +903,6 @@
           '<div class="info-row"><span class="info-label">STATUS</span><span class="info-value">未检测到核显</span></div>';
       }
 
-      // Temperature —— 后端已把 cpu/gpu 分类好，缺失时再按名字兜底
-      if (data.temperature && data.temperature.sensors) {
-        const sensors = data.temperature.sensors;
-        const values = Object.values(sensors).filter(v => Number.isFinite(v));
-        const avgTemp = values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : null;
-        setText('tempBadge', avgTemp ? `${avgTemp}°C AVG` : '--°C AVG');
-
-        const pickSensor = (kind) => {
-          const entry = data.temperature[kind];
-          if (entry && entry.value != null) return entry.value;
-          const key = Object.keys(sensors).find(k => k.toLowerCase().includes(kind));
-          return key ? sensors[key] : null;
-        };
-
-        const cpuTemp = pickSensor('cpu');
-        const gpuTemp = pickSensor('gpu');
-        setText('cpuTemp', cpuTemp != null ? `${cpuTemp}°C` : '--°C');
-        setText('gpuTemp', gpuTemp != null ? `${gpuTemp}°C` : '--°C');
-
-        // 标出 CPU 温度来自哪个接口：内核级 CPU Package 还是 ACPI 平台热区
-        const cpuMeta = data.temperature.cpu || null;
-        const sourceLabels = {
-          lhm: 'CPU PKG', ohm: 'CPU OHM', acpi: 'CPU ACPI', wmi: 'CPU WMI',
-          hwmon: 'CPU HWMON', thermal: 'CPU THERMAL',
-        };
-        const sourceKey = cpuMeta && cpuMeta.source;
-        // 来源缺失或未知时显示 --，不猜测也不抛异常
-        setText('cpuTempLabel', (sourceKey && sourceLabels[sourceKey]) || '--');
-        const cpuEl = document.getElementById('cpuTemp');
-        if (cpuEl) {
-          cpuEl.title = cpuMeta && cpuMeta.name
-            ? `来源: ${cpuMeta.name}${sourceKey === 'acpi' ? '（平台热区，通常低于核心温度；以管理员身份运行可读内核级温度）' : ''}`
-            : 'CPU 温度来源: 未知';
-        }
-
-        // 两条曲线分开画：CPU 蓝、GPU 红（缺失的那条传 null，只画有的）
-        tempSL.push(cpuTemp, gpuTemp);
-      }
     }
 
     // ---- 断线重连 ----

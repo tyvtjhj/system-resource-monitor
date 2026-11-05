@@ -230,11 +230,6 @@
     .card--network { display: flex; flex-direction: column; }
     .card--network .sparkline { flex: 1 1 120px; height: auto; min-height: 120px; }
 
-    /* TEMPERATURE 整行条带：左侧读数、右侧曲线 */
-    .card--temp .temp-strip { display: grid; grid-template-columns: 180px 1fr; gap: 28px; align-items: center; }
-    .card--temp .sparkline { height: 72px; }
-    .temp-stats { display: grid; gap: 12px; }
-
     /* 交互与状态 */
     .card[data-panel] { cursor: pointer; }
     .card[data-panel]:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 3px; }
@@ -248,7 +243,6 @@
     /* Responsive */
     @media (max-width: 1024px) {
       .grid-3 > .card { grid-column: span 6; }
-      .card--temp .temp-strip { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 768px) {
@@ -412,7 +406,7 @@
       <div class="sys-item"><span class="sys-label">THREADS</span><span class="sys-value" id="procThreads">--</span></div>
     </div>
 
-    <!-- 指标卡：单一 12 列栅格，每张卡 span 4，温度卡整行 -->
+    <!-- 指标卡：单一 12 列栅格，每张卡 span 4 -->
     <div class="grid-3">
       <!-- CPU CORES (moved to sidebar, opened by clicking CPU card) -->
       <div class="card" data-panel="cores" data-gauge-card role="button" tabindex="0" aria-haspopup="dialog" aria-controls="coreSidebar">
@@ -453,17 +447,6 @@
         <div class="card-header"><span class="card-title">iGPU</span><span class="badge" id="igpuBadge">--%</span></div>
         <div class="gauge-wrap"><svg class="gauge-svg" viewBox="0 0 240 240" id="igpuGauge"></svg></div>
         <div id="igpuInfo"></div>
-      </div>
-
-      <div class="card card--full card--temp">
-        <div class="card-header"><span class="card-title">TEMPERATURE</span><span class="badge" id="tempBadge">--°C AVG</span></div>
-        <div class="temp-strip">
-          <div class="temp-stats">
-            <div><span class="info-label"><span class="legend-dot" style="background:#3b82f6"></span><span id="cpuTempLabel">CPU</span></span><br/><span class="info-value" id="cpuTemp">--°C</span></div>
-            <div><span class="info-label"><span class="legend-dot" style="background:#ef4444"></span>GPU</span><br/><span class="info-value" id="gpuTemp">--°C</span></div>
-          </div>
-          <canvas class="sparkline" id="tempSparkline"></canvas>
-        </div>
       </div>
 
     </div>
@@ -756,8 +739,6 @@
 
     // ---- SPARKLINE INSTANCES ----
     const netSL = new Sparkline('netSparkline', '#3b82f6');
-    // CPU 蓝 / GPU 红，与下方数值的图例颜色一致
-    const tempSL = new Sparkline('tempSparkline', ['#3b82f6', '#ef4444']);
 
     async function fetchAll() {
       try {
@@ -927,44 +908,6 @@
           '<div class="info-row"><span class="info-label">STATUS</span><span class="info-value">未检测到核显</span></div>';
       }
 
-      // Temperature —— 后端已把 cpu/gpu 分类好，缺失时再按名字兜底
-      if (data.temperature && data.temperature.sensors) {
-        const sensors = data.temperature.sensors;
-        const values = Object.values(sensors).filter(v => Number.isFinite(v));
-        const avgTemp = values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1) : null;
-        setText('tempBadge', avgTemp ? `${avgTemp}°C AVG` : '--°C AVG');
-
-        const pickSensor = (kind) => {
-          const entry = data.temperature[kind];
-          if (entry && entry.value != null) return entry.value;
-          const key = Object.keys(sensors).find(k => k.toLowerCase().includes(kind));
-          return key ? sensors[key] : null;
-        };
-
-        const cpuTemp = pickSensor('cpu');
-        const gpuTemp = pickSensor('gpu');
-        setText('cpuTemp', cpuTemp != null ? `${cpuTemp}°C` : '--°C');
-        setText('gpuTemp', gpuTemp != null ? `${gpuTemp}°C` : '--°C');
-
-        // 标出 CPU 温度来自哪个接口：内核级 CPU Package 还是 ACPI 平台热区
-        const cpuMeta = data.temperature.cpu || null;
-        const sourceLabels = {
-          lhm: 'CPU PKG', ohm: 'CPU OHM', acpi: 'CPU ACPI', wmi: 'CPU WMI',
-          hwmon: 'CPU HWMON', thermal: 'CPU THERMAL',
-        };
-        const sourceKey = cpuMeta && cpuMeta.source;
-        // 来源缺失或未知时显示 --，不猜测也不抛异常
-        setText('cpuTempLabel', (sourceKey && sourceLabels[sourceKey]) || '--');
-        const cpuEl = document.getElementById('cpuTemp');
-        if (cpuEl) {
-          cpuEl.title = cpuMeta && cpuMeta.name
-            ? `来源: ${cpuMeta.name}${sourceKey === 'acpi' ? '（平台热区，通常低于核心温度；以管理员身份运行可读内核级温度）' : ''}`
-            : 'CPU 温度来源: 未知';
-        }
-
-        // 两条曲线分开画：CPU 蓝、GPU 红（缺失的那条传 null，只画有的）
-        tempSL.push(cpuTemp, gpuTemp);
-      }
     }
 
     // ---- 断线重连 ----

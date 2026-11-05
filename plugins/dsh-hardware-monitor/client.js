@@ -3,7 +3,7 @@
  *
  * 在输入框下方（conversation.composer.dock）放一个常驻小挂件（不再占用对话区右上角）：
  *   - 每 2 秒从 /hardware-monitor-api/summary 读一次快照（同源代理，避免 CORS/混合内容）；
- *   - 显示 CPU / 内存 / GPU / 温度，点击展开明细并可直接打开完整面板；
+ *   - 显示 CPU / 内存 / GPU，点击展开明细并可直接打开完整面板；
  *   - 会话区 slot 不存在时回退到 composer dock（官方模板位）。
  *
  * 模块格式与 DSH 官方模板一致：
@@ -111,9 +111,6 @@ window.__ModuleLoader__.load({
       const cpu = num((data.cpu || {}).usage);
       const mem = num((data.memory || {}).usage_percent);
       const gpu = num((data.gpu || {}).usage);
-      const temperature = data.temperature || {};
-      const tempEntry = temperature.cpu || temperature.gpu || {};
-      const temp = num(tempEntry.value);
       const net = data.network_speed || {};
       const dotColor = offline ? '#9ca3af' : (cpu !== null && cpu > 80 ? '#ef4444' : '#10b981');
       const chipText = `CPU ${fmt(cpu)}% · MEM ${fmt(mem)}%`;
@@ -123,7 +120,6 @@ window.__ModuleLoader__.load({
             `CPU ${fmt(cpu)}%`,
             `MEM ${fmt(mem)}%`,
             `GPU ${fmt(gpu)}%`,
-            `TEMP ${fmt(temp, 1)}°C`,
             `↓ ${fmt(net.download_mbps, 1)} MB/s`,
             `↑ ${fmt(net.upload_mbps, 1)} MB/s`,
           ].join(' · ');
@@ -154,7 +150,6 @@ window.__ModuleLoader__.load({
         h('div', { style: rowStyle }, h('span', {}, 'CPU'), h('b', {}, `${fmt(cpu)}%`)),
         h('div', { style: rowStyle }, h('span', {}, 'MEM'), h('b', {}, `${fmt(mem)}%`)),
         h('div', { style: rowStyle }, h('span', {}, 'GPU'), h('b', {}, `${fmt(gpu)}%`)),
-        h('div', { style: rowStyle }, h('span', {}, 'TEMP'), h('b', {}, `${fmt(temp, 1)}°C`)),
         h('div', { style: rowStyle }, h('span', {}, 'DOWN'), h('b', {}, `${fmt(net.download_mbps, 1)} MB/s`)),
         h('div', { style: rowStyle }, h('span', {}, 'UP'), h('b', {}, `${fmt(net.upload_mbps, 1)} MB/s`)),
         h('a', {
@@ -354,7 +349,6 @@ window.__ModuleLoader__.load({
       const cpu = data.cpu || {};
       const memory = data.memory || {};
       const gpu = data.gpu || {};
-      const temperature = data.temperature || {};
       const network = data.network_speed || {};
       const system = data.system_info || {};
       const disks = Array.isArray(data.disk) ? data.disk : [];
@@ -372,9 +366,6 @@ window.__ModuleLoader__.load({
       const cpuUsage = num(cpu.usage);
       const memUsage = num(memory.usage_percent);
       const gpuUsage = num(gpu.usage);
-      const cpuTemp = temperature.cpu ? num(temperature.cpu.value) : null;
-      const gpuTemp = temperature.gpu ? num(temperature.gpu.value) : null;
-      const mainTemp = cpuTemp !== null ? cpuTemp : gpuTemp;
       const download = num(network.download_mbps);
       const upload = num(network.upload_mbps);
       const latency = num(data.latency_ms);
@@ -456,7 +447,6 @@ window.__ModuleLoader__.load({
           metricCard('CPU', `${fmt(cpuUsage)}%`, `${cpuFreqText} · ${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`, cpuUsage),
           metricCard('内存', `${fmt(memUsage)}%`, `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`, memUsage),
           metricCard('GPU', `${fmt(gpuUsage)}%`, `${gpu.name || '--'} · 显存 ${fmt(gpu.used_gb, 1)}/${fmt(gpu.total_gb, 1)} GB`, gpuUsage),
-          metricCard('温度', mainTemp === null ? '--' : `${fmt(mainTemp, 1)}°C`, temperature.cpu && temperature.cpu.source ? `来源 ${temperature.cpu.source}` : '', null),
           metricCard('下载', download === null ? '--' : `${fmt(download, 1)} MB/s`, '整机网络合计', null),
           metricCard('上传', upload === null ? '--' : `${fmt(upload, 1)} MB/s`, '整机网络合计', null)),
 
@@ -476,7 +466,7 @@ window.__ModuleLoader__.load({
                     h('span', {}, `C${index}`), h('span', {}, `${fmt(value)}%`)),
                   h('div', { style: barBg }, h('div', { style: barFill(num(value) || 0) })))))),
           h('div', { style: { ...cardStyle, flex: '1 1 260px', minWidth: '240px' } },
-            h('strong', {}, '内存 / GPU / 温度'),
+            h('strong', {}, '内存 / GPU'),
             h('div', { style: { ...rowStyle, marginTop: '8px' } },
               h('span', { style: labelStyle }, '内存'),
               h('span', { style: { fontSize: '12px' } }, `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`)),
@@ -484,10 +474,6 @@ window.__ModuleLoader__.load({
             h('div', { style: { ...rowStyle, marginTop: '8px' } },
               h('span', { style: labelStyle }, 'GPU'),
               h('span', { style: { fontSize: '12px' } }, `${gpu.name || '--'} · ${fmt(gpuUsage)}%`)),
-            h('div', { style: { ...rowStyle, marginTop: '4px' } },
-              h('span', { style: labelStyle }, '温度'),
-              h('span', { style: { fontSize: '12px' } },
-                `CPU ${cpuTemp === null ? '--' : `${fmt(cpuTemp, 1)}°C`} · GPU ${gpuTemp === null ? '--' : `${fmt(gpuTemp, 1)}°C`}`)),
             h('div', { style: { ...rowStyle, marginTop: '4px' } },
               h('span', { style: labelStyle }, '延迟'),
               h('span', { style: { fontSize: '12px' } }, `${fmt(latency, 1)} ms`)))),
