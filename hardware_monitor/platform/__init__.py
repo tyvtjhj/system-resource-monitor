@@ -2,7 +2,6 @@
 
 统一接口（两个平台模块都必须提供）：
     is_elevated() -> bool
-    request_elevation(argv: list[str]) -> bool
     subprocess_flags() -> dict
     physical_disks() -> list[dict]
     network_details() -> dict            # {"adapters": [...], "count": n}
@@ -27,7 +26,6 @@ else:
     from . import linux as _impl
 
 is_elevated = _impl.is_elevated
-request_elevation = _impl.request_elevation
 subprocess_flags = _impl.subprocess_flags
 physical_disks = _impl.physical_disks
 partition_parent = _impl.partition_parent

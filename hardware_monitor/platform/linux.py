@@ -7,7 +7,7 @@
   绝不把异常抛给采样线程。
 
 对外接口（与 platform/windows.py 同名同结构，由 platform/__init__.py 统一导出）：
-    is_elevated, request_elevation, subprocess_flags, physical_disks,
+    is_elevated, subprocess_flags, physical_disks,
     network_details, integrated_gpu, capabilities
 """
 
@@ -22,7 +22,6 @@ import psutil
 
 __all__ = [
     "is_elevated",
-    "request_elevation",
     "subprocess_flags",
     "physical_disks",
     "parent_device",
@@ -61,16 +60,6 @@ def is_elevated() -> bool:
         return geteuid() == 0
     except OSError:
         return False
-
-
-def request_elevation(argv: list[str]) -> bool:
-    """Linux 不自动提权：不调用 sudo、不弹窗，始终返回 False。
-
-    argv 保留仅为与 Windows 版签名兼容；调用方应提示用户用 sudo 启动，
-    或把用户加入所需用户组（video / adm 等）后重启服务。
-    """
-    del argv
-    return False
 
 
 def subprocess_flags() -> dict:
@@ -460,6 +449,5 @@ def capabilities() -> dict:
         "physical_disk": True,
         "network_detail": True,
         "cpu_freq_per_core": True,
-        "lhm": False,
         "powershell": False,
     }

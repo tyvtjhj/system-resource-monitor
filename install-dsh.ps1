@@ -10,7 +10,7 @@
       2. 检查 DSH desktop profile；
       3. 创建 .venv 并安装锁定依赖（复用 scripts/bootstrap.ps1）；
       4. 安装 DSH 插件（junction + profile bundle + skill + 热加载）；
-      5. 启动 5678 监控服务（非管理员，温度走 ACPI）；
+      5. 启动 5678 监控服务；
       6. 打印使用说明。
 
 .PARAMETER InstallDir
@@ -179,8 +179,8 @@ try {
 }
 
 if (-not $online -and -not $NoStart) {
-    Step '启动监控服务（非管理员；需要 CPU Package 温度时请改用 run.bat 提权）'
-    Start-Process -FilePath $venvPython -ArgumentList @('-m', 'hardware_monitor', '--no-elevate') -WorkingDirectory $Repo -WindowStyle Hidden
+    Step '启动监控服务'
+    Start-Process -FilePath $venvPython -ArgumentList @('-m', 'hardware_monitor') -WorkingDirectory $Repo -WindowStyle Hidden
     for ($i = 0; $i -lt 30; $i++) {
         Start-Sleep -Milliseconds 500
         try {
@@ -205,6 +205,5 @@ Write-Host ''
 Write-Host '安装完成。' -ForegroundColor Green
 Write-Host '  • 打开 DSH 并按 Ctrl+R 刷新：侧边栏「硬件监控」+ 输入框下方性能挂件'
 Write-Host "  • 完整仪表盘：$serviceUrl/"
-Write-Host "  • 需要内核级 CPU 温度：关闭当前服务后运行 $Repo\run.bat（管理员）"
 Write-Host '  • 可选环境变量：HARDWARE_MONITOR_URL / HARDWARE_MONITOR_TOKEN（启动 DSH 前设置）'
 Write-Host "  • 卸载插件：powershell -ExecutionPolicy Bypass -File `"$Repo\plugins\dsh-hardware-monitor\uninstall.ps1`""

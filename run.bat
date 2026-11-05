@@ -1,9 +1,7 @@
 @echo off
 rem Start the monitor.
 rem Interpreter order: project .venv -> py -3.10 -> py -3 -> python.
-rem server.py requests Administrator rights by itself (UAC) unless --no-elevate,
-rem because CPU package temperature needs the PawnIO driver.
-rem Extra arguments are passed through, e.g.:  run.bat --no-elevate
+rem Extra arguments are passed through to server.py.
 cd /d "%~dp0"
 
 set "PY="
@@ -23,6 +21,5 @@ echo [run] python: %PY%
 %PY% server.py %*
 set "RC=%errorlevel%"
 
-rem If elevation succeeded, server.py exits 0 right away and this window closes.
 if not "%RC%"=="0" pause
 exit /b %RC%

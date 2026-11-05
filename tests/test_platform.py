@@ -29,7 +29,6 @@ CAPABILITY_KEYS = {
 
 PLATFORM_FUNCTIONS = (
     "is_elevated",
-    "request_elevation",
     "subprocess_flags",
     "physical_disks",
     "partition_parent",

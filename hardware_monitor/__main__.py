@@ -1,10 +1,9 @@
-"""CLI 入口：参数解析、提权、单实例检测、启动采样线程与 Flask。
+"""CLI 入口：参数解析、单实例检测、启动采样线程与 Flask。
 
 用法（兼容旧入口）：
     python server.py                 # 等价于 python -m hardware_monitor
     python -m hardware_monitor
-    python server.py --no-elevate    # 不申请管理员权限
-新增参数：
+参数：
     --host / --port                  # 覆盖 MONITOR_HOST / MONITOR_PORT
     --version                        # 打印版本
 优先级：命令行 > 环境变量 > 默认值。
@@ -21,7 +20,6 @@ import time
 import psutil
 
 from . import __version__, config, sampler
-from . import platform as platform_info
 from .api import create_app
 from .state import _state
 
@@ -33,16 +31,6 @@ def build_parser():
     )
     parser.add_argument("--host", default=None, help="监听地址（覆盖 MONITOR_HOST）")
     parser.add_argument("--port", type=int, default=None, help="监听端口（覆盖 MONITOR_PORT）")
-    parser.add_argument(
-        "--no-elevate",
-        action="store_true",
-        help="不申请管理员权限（Windows 下 CPU 温度降级为 ACPI 平台温度）",
-    )
-    parser.add_argument(
-        "--elevated",
-        action="store_true",
-        help="内部使用：标记已提权，防止递归拉起",
-    )
     parser.add_argument(
         "--version",
         action="version",
@@ -87,13 +75,6 @@ def listener_pids():
 
 def _print_runtime_info():
     print(f"[OK] Hardware Monitor service started at http://127.0.0.1:{config.PORT}")
-    if platform_info.is_elevated():
-        print("[OK] 运行权限: 管理员（CPU 温度可读内核级 CPU Package）")
-    elif config.PLATFORM == "windows":
-        print("[INFO] 运行权限: 普通用户 —— CPU 温度只能读 ACPI 平台温度；"
-              "需要精确值请用 run-admin.bat 以管理员身份启动")
-    else:
-        print("[INFO] 运行权限: 普通用户（不自动提权；读取部分传感器可能需要 sudo）")
     if config.HOST in ("0.0.0.0", ""):
         print(f"[OK] LAN access enabled on port {config.PORT} "
               f"(set MONITOR_HOST=127.0.0.1 to restrict)")
@@ -104,11 +85,6 @@ def _print_runtime_info():
 def main(argv=None):
     args = build_parser().parse_args(argv)
     _apply_cli_overrides(args)
-
-    elevation_argv = list(argv) if argv is not None else sys.argv[1:]
-    if platform_info.request_elevation(elevation_argv):
-        print("[OK] 已请求管理员权限，服务将在新的管理员窗口中启动；本窗口关闭")
-        return 0
 
     if monitor_already_running():
         pids = listener_pids()

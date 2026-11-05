@@ -40,7 +40,7 @@ EXPECTED_VENV = PROJECT_ROOT / ".venv"
 PACKAGES = [
     ("flask", True, "HTTP 服务与路由"),
     ("psutil", True, "CPU / 内存 / 磁盘 / 网络 / 进程"),
-    ("WMI", sys.platform == "win32", "物理硬盘 / 网卡详情 / 温度兜底（仅 Windows）"),
+    ("WMI", sys.platform == "win32", "物理硬盘 / 网卡详情（仅 Windows）"),
     ("pywin32", sys.platform == "win32", "性能计数器与 WMI 初始化（仅 Windows）"),
     ("pynvml", False, "NVIDIA 显卡利用率与显存"),
 ]

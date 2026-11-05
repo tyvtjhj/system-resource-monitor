@@ -1,7 +1,7 @@
-"""Windows 平台适配：UAC、WMI、PDH 性能计数器、网卡与物理盘。
+"""Windows 平台适配：WMI、PDH 性能计数器、网卡与物理盘。
 
 本模块集中了所有 Windows 专有逻辑（相对 T1 的 server.py 只是搬移，行为保持不变）：
-  - is_elevated / request_elevation：管理员检测与 UAC 重新拉起
+  - is_elevated：当前进程权限检测（仅用于状态展示）
   - wmi_client：线程内 WMI 单例（避免每轮重连 DCOM）
   - physical_disks：Win32_DiskDrive 物理盘信息（不含分区）
   - network_details：Win32_NetworkAdapterConfiguration + psutil 合并
@@ -16,11 +16,9 @@ import os
 import re
 import socket
 import subprocess
-import sys
 import threading
 import time
 
-from .. import config
 from ..collectors.common import _normalize_mac, psutil_network_adapters
 
 
@@ -35,43 +33,6 @@ def is_elevated():
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
     except Exception:  # noqa: BLE001
         return False
-
-
-def request_elevation(argv):
-    """默认以管理员身份启动：非管理员时用 UAC 重新拉起自己。
-
-    返回 True 表示已经把工作交给提权后的新进程；False 表示已在管理员权限下，
-    或提权被拒绝/不可用，此时继续以普通权限运行（CPU 温度会降级为 ACPI）。
-
-    防止递归：提权后的子进程会带 --elevated 参数，见到它就不再尝试提权。
-    需要关掉自动提权时：命令行加 --no-elevate，或设 MONITOR_NO_ELEVATE=1。
-    """
-    if os.name != "nt" or is_elevated():
-        return False
-    if "--elevated" in argv:
-        return False
-    if "--no-elevate" in argv:
-        return False
-    if os.environ.get("MONITOR_NO_ELEVATE", "").strip().lower() in ("1", "true", "yes", "on"):
-        return False
-
-    try:
-        import ctypes
-
-        script = os.path.join(config.BASE_DIR, "server.py")
-        extra = [arg for arg in argv if arg not in ("--no-elevate", "--elevated")]
-        params = subprocess.list2cmdline([script, *extra, "--elevated"])
-        rc = ctypes.windll.shell32.ShellExecuteW(
-            None, "runas", sys.executable, params, config.BASE_DIR, 1
-        )
-        if rc > 32:
-            return True
-        # 5 = 用户在 UAC 上点了"否"
-        print(f"[WARN] 未获得管理员权限（ShellExecuteW={rc}），将以普通权限运行，"
-              f"CPU 温度为 ACPI 平台温度")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[WARN] 提权失败: {exc}，将以普通权限运行")
-    return False
 
 
 def subprocess_flags():

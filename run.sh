@@ -3,7 +3,7 @@
 #
 # Prefers the project virtualenv (.venv/bin/python), then python3, then python.
 # Extra arguments are passed through to server.py, e.g.:
-#   ./run.sh --no-elevate
+#   ./run.sh --port 5679
 set -euo pipefail
 
 cd "$(dirname "$0")"

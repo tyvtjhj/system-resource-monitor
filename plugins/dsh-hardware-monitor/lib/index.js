@@ -6,7 +6,7 @@
  *      让 DSH 渲染进程不受 CORS/混合内容影响；
  *   2. 注册 hardware_monitor_status 工具，让模型可以直接查询本机 CPU/内存/GPU/网络；
  *   3. **自动拉起监控服务**：DSH 启动/插件重载时若 5678 未运行，用仓库 .venv 的 Python
- *      以 --no-elevate 启动（避免 UAC 弹窗），并做 30 秒看门狗重试。
+ *      后台启动并做 30 秒看门狗重试。
  *
  * 服务地址 / token 通过环境变量配置（在启动 DSH 的终端设置）：
  *   HARDWARE_MONITOR_URL       默认 http://127.0.0.1:5678
@@ -159,7 +159,7 @@ async function ensureService(reason = 'startup') {
       try { mkdirSync(tempDir, { recursive: true }) } catch { tempDir = process.env.TEMP || '' }
     }
 
-    const child = spawn(python, ['-m', 'hardware_monitor', '--no-elevate'], {
+    const child = spawn(python, ['-m', 'hardware_monitor'], {
       cwd: repo,
       detached: true,
       windowsHide: true,
@@ -167,7 +167,6 @@ async function ensureService(reason = 'startup') {
       env: {
         ...process.env,
         ...(tempDir ? { TEMP: tempDir, TMP: tempDir } : {}),
-        MONITOR_NO_ELEVATE: '1',
         ...(TOKEN ? { MONITOR_TOKEN: TOKEN } : {}),
       },
     })

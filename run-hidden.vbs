@@ -16,4 +16,4 @@ End If
 
 shell.CurrentDirectory = repo
 ' 0 = hidden window, False = do not wait
-shell.Run """" & python & """ -m hardware_monitor --no-elevate", 0, False
+shell.Run """" & python & """ -m hardware_monitor", 0, False
