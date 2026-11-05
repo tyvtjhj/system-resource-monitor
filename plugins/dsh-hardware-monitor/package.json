@@ -1,7 +1,6 @@
 {
   "name": "dsh-hardware-monitor",
   "version": "1.1.8",
-  "private": true,
   "description": "DSH 插件：把本机 Hardware Monitor 接入 dsh —— 侧边栏完整面板 + 输入框下方性能挂件 + hardware_monitor_status 工具",
   "type": "module",
   "main": "lib/index.js",
@@ -30,5 +29,27 @@
     "type": "git",
     "url": "https://github.com/tyvtjhj/system-resource-monitor.git"
   },
-  "homepage": "https://github.com/tyvtjhj/system-resource-monitor"
+  "homepage": "https://github.com/tyvtjhj/system-resource-monitor",
+  "author": "tyvtjhj",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "hardware-monitor",
+    "system-monitor",
+    "windows"
+  ],
+  "files": [
+    "client.js",
+    "lib/",
+    "cordis.patch.yml",
+    "adapter.config.json",
+    "inject.js",
+    "install.ps1",
+    "uninstall.ps1",
+    "SKILL.md",
+    "README.md",
+    "screenshots.json",
+    "assets/",
+    "LICENSE"
+  ]
 }
