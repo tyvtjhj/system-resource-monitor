@@ -1,6 +1,6 @@
 """NVIDIA GPU 采集：NVML（pynvml）与 nvidia-smi 子进程。
 
-NVML 提供利用率/显存/温度；`nvidia-smi dmon -s u` 提供 CUDA/3D/编码/解码引擎，
+NVML 提供利用率/显存；`nvidia-smi dmon -s u` 提供 CUDA/3D/编码/解码引擎，
 两者都不可用时静默降级（GPU 字段为 None / 空 engines），不影响其他指标。
 """
 
@@ -63,17 +63,6 @@ class NvmlSession:
             "used_gb": round(used_mb / 1024 ** 3, 1),
             "total_gb": round(total_mb / 1024 ** 3, 1),
         }
-
-    def temperatures(self):
-        sensors = {}
-        for handle in self.handles:
-            try:
-                sensors[f"GPU ({self._name(handle)})"] = round(
-                    float(self.nvml.nvmlDeviceGetTemperature(handle, 0)), 1
-                )
-            except Exception:  # noqa: BLE001
-                continue
-        return {"sensors": sensors}
 
 
 # ---------------- GPU 引擎利用率（nvidia-smi） ----------------

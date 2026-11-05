@@ -27,7 +27,7 @@ FRAME_ANCESTORS = os.environ.get(
 ).strip()
 
 # ---------------- 采样节奏 ----------------
-FAST_INTERVAL = 1.0    # CPU / 内存 / 网络速率 / GPU / 温度
+FAST_INTERVAL = 1.0    # CPU / 内存 / 网络速率 / GPU
 SLOW_INTERVAL = 3.0    # 磁盘 / 系统信息（WMI、进程枚举较重）
 ENGINE_INTERVAL = 3.0  # nvidia-smi 子进程较重，单独低频
 

@@ -1,6 +1,6 @@
 """后台采样调度线程。
 
-保持原节奏：快指标 1s（CPU/内存/网络速率/GPU/温度），慢指标 3s（磁盘/系统信息/核显），
+保持原节奏：快指标 1s（CPU/内存/网络速率/GPU），慢指标 3s（磁盘/系统信息/核显），
 GPU 引擎 3s。所有指标都由 `state.collect()` 执行，单个失败只记录 `<key>_error`，
 采样线程本身不会退出。
 """
@@ -14,7 +14,7 @@ import psutil
 
 from . import config
 from . import platform as platform_info
-from .collectors import common, nvidia, temperature
+from .collectors import common, nvidia
 from .state import _state, _state_lock, collect, put, put_error
 
 _stop = threading.Event()
@@ -27,7 +27,6 @@ def stop():
 
 def sampler_loop():
     nvml = nvidia.NvmlSession()
-    cpu_temp = temperature.TemperatureReader()
     prev_counters = psutil.net_io_counters()
     prev_ts = time.time()
 
@@ -51,8 +50,6 @@ def sampler_loop():
 
             gpu = collect("gpu", nvml.gpu)
             gpu_name = (gpu or {}).get("name", "")
-
-            collect("temperature", temperature.collect_temperature, nvml, cpu_temp)
 
             if cycle_started >= next_slow:
                 next_slow = cycle_started + config.SLOW_INTERVAL

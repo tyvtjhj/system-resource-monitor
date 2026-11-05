@@ -5,7 +5,7 @@
   state.py             内存快照与错误隔离（put / put_error / collect）
   sampler.py           后台采样调度线程
   api.py               Flask app factory 与全部 HTTP 路由
-  collectors/          psutil 通用采集、NVML、温度调度
+  collectors/          psutil 通用采集、NVML
   platform/            平台适配（windows.py / linux.py）
 """
 
