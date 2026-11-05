@@ -29,6 +29,11 @@ window.__ModuleLoader__.load({
       return parsed === null ? '--' : parsed.toFixed(digits || 0);
     }
 
+    function formatGhz(mhz) {
+      const parsed = num(mhz);
+      return parsed === null ? '--' : `${(parsed / 1000).toFixed(2)} GHz`;
+    }
+
     function readLocalToken() {
       try { return localStorage.getItem('hardware-monitor-token') || ''; } catch { return ''; }
     }
@@ -357,6 +362,12 @@ window.__ModuleLoader__.load({
       const partitions = disks.filter((disk) => disk && disk.type !== 'physical');
       const processList = state.processes && Array.isArray(state.processes.processes) ? state.processes.processes : [];
       const cores = Array.isArray(cpu.per_core) ? cpu.per_core : [];
+      const cpuFreq = cpu.freq && typeof cpu.freq === 'object' ? cpu.freq : null;
+      const perCoreMhz = cpuFreq && Array.isArray(cpuFreq.per_core_mhz) ? cpuFreq.per_core_mhz : [];
+      const cpuFreqAvg = cpuFreq ? num(cpuFreq.avg_mhz) : null;
+      const cpuFreqText = cpuFreqAvg !== null
+        ? `${formatGhz(cpuFreqAvg)} · ${fmt(cpuFreq.min_mhz)}–${fmt(cpuFreq.max_mhz)} MHz`
+        : `${fmt(cpu.freq_current_mhz)} MHz`;
 
       const cpuUsage = num(cpu.usage);
       const memUsage = num(memory.usage_percent);
@@ -442,7 +453,7 @@ window.__ModuleLoader__.load({
           : null,
 
         h('div', { style: gridStyle },
-          metricCard('CPU', `${fmt(cpuUsage)}%`, `${fmt(cpu.freq_current_mhz)} MHz · ${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`, cpuUsage),
+          metricCard('CPU', `${fmt(cpuUsage)}%`, `${cpuFreqText} · ${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`, cpuUsage),
           metricCard('内存', `${fmt(memUsage)}%`, `${fmt(memory.used_gb, 1)} / ${fmt(memory.total_gb, 1)} GB`, memUsage),
           metricCard('GPU', `${fmt(gpuUsage)}%`, `${gpu.name || '--'} · 显存 ${fmt(gpu.used_gb, 1)}/${fmt(gpu.total_gb, 1)} GB`, gpuUsage),
           metricCard('温度', mainTemp === null ? '--' : `${fmt(mainTemp, 1)}°C`, temperature.cpu && temperature.cpu.source ? `来源 ${temperature.cpu.source}` : '', null),
@@ -453,7 +464,9 @@ window.__ModuleLoader__.load({
           h('div', { style: { ...cardStyle, flex: '1 1 360px', minWidth: '280px' } },
             h('div', { style: rowStyle },
               h('strong', {}, 'CPU 各核心'),
-              h('span', { style: labelStyle }, `${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`)),
+              h('span', { style: labelStyle }, cpuFreqAvg !== null
+                ? `${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程 · ${formatGhz(cpuFreqAvg)}`
+                : `${cpu.count_physical || '--'} 核 / ${cpu.count_logical || '--'} 线程`)),
             cores.length === 0
               ? h('div', { style: { ...labelStyle, marginTop: '8px' } }, cpuUsage === null ? '等待数据…' : '核心明细不可用')
               : h('div', {

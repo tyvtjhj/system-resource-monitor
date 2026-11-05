@@ -30,6 +30,7 @@ def test_dsh_client_registers_sidebar_entry_and_panel():
     assert payload["panelRender"] == "ok", payload
     assert payload["panelHasPhysicalModel"] is True, payload
     assert payload["panelHasVisualization"] is True, payload
+    assert payload["panelHasFrequency"] is True, payload
     assert payload["panelTextHasUndefined"] is False, payload
 
     registrations = payload["registrations"]

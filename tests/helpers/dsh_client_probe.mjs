@@ -55,7 +55,11 @@ module.apply(ctx);
 
 const panelState = {
   data: {
-    cpu: { usage: 18.5, per_core: [10, 20, 30], count_physical: 8, count_logical: 16, freq_current_mhz: 2600 },
+    cpu: {
+      usage: 18.5, per_core: [10, 20, 30], count_physical: 8, count_logical: 16,
+      freq_current_mhz: 3200,
+      freq: { avg_mhz: 3200, min_mhz: 2800, max_mhz: 4000, per_core_mhz: [3000, 3100, 3200] },
+    },
     memory: { used_gb: 8.2, total_gb: 16, usage_percent: 51.2, available_gb: 7.8 },
     gpu: { name: 'Fake GPU', usage: 9, used_gb: 1.2, total_gb: 8 },
     temperature: { cpu: { value: 47.5, source: 'acpi' }, gpu: { value: 40 } },
@@ -77,6 +81,7 @@ const panelState = {
 let panelRender = 'skipped';
 let panelHasPhysicalModel = false;
 let panelHasVisualization = false;
+let panelHasFrequency = false;
 let panelTextHasUndefined = false;
 try {
   hookQueue.push(panelState);
@@ -87,6 +92,7 @@ try {
     const treeText = JSON.stringify(tree);
     panelHasPhysicalModel = treeText.includes('Fake SSD');
     panelHasVisualization = treeText.includes('实时可视化');
+    panelHasFrequency = treeText.includes('GHz');
     panelTextHasUndefined = treeText.includes('undefined');
   }
 } catch (error) {
@@ -99,5 +105,6 @@ console.log(JSON.stringify({
   panelRender,
   panelHasPhysicalModel,
   panelHasVisualization,
+  panelHasFrequency,
   panelTextHasUndefined,
 }));

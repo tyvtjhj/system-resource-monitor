@@ -62,9 +62,13 @@ localStorage.setItem('hardware-monitor-token', '你的口令')
 - **输入框下方（composer dock）**：实时小挂件（CPU/MEM/GPU/TEMP，点击向上展开明细），不再占用对话右上角；
 - **侧边栏图标**：像插件市场一样在侧边栏注册入口（`sidebar.panellist`），点击后
   由宿主打开 `main(key=hardware-monitor)` 面板；面板是**原生 React 面板**（不再用 iframe），
-  通过 DSH 同源代理 `/hardware-monitor-api/{summary,processes}` 渲染指标、每核占用、磁盘与进程 Top，
+  通过 DSH 同源代理 `/hardware-monitor-api/{summary,processes}` 渲染指标、每核占用/频率、磁盘与进程 Top，
   并提供「在浏览器打开」链接（需要 token 时从 `localStorage.hardware-monitor-token` 读取并拼接）；
 - 安装/重载后需刷新 DSH 页面（Ctrl+R）加载客户端半。
+
+### CPU 逐核频率
+
+面板会读取 `/api/cpu` 新增的可选 `freq` 字段：CPU 卡片显示全核平均与范围，「CPU 各核心」每格在占用率下方显示该逻辑处理器的实时频率；后端读不到逐核频率时自动隐藏频率行，不影响原有占用展示。
 
 ### 工具
 
