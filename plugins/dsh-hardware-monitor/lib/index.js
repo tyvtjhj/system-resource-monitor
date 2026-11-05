@@ -4,7 +4,7 @@
  * 职责：
  *   1. 注册 /hardware-monitor-api 数据通道（同源代理到本机 Hardware Monitor Flask 服务），
  *      让 DSH 渲染进程不受 CORS/混合内容影响；
- *   2. 注册 hardware_monitor_status 工具，让模型可以直接查询本机 CPU/内存/GPU/温度/网络；
+ *   2. 注册 hardware_monitor_status 工具，让模型可以直接查询本机 CPU/内存/GPU/网络；
  *   3. **自动拉起监控服务**：DSH 启动/插件重载时若 5678 未运行，用仓库 .venv 的 Python
  *      以 --no-elevate 启动（避免 UAC 弹窗），并做 30 秒看门狗重试。
  *
@@ -269,13 +269,10 @@ function num(value) {
 
 function summarize(data) {
   data = data || {}
-  const temperature = data.temperature || {}
-  const cpuTemp = temperature.cpu || temperature.gpu || {}
   return {
     cpu: num((data.cpu || {}).usage),
     mem: num((data.memory || {}).usage_percent),
     gpu: num((data.gpu || {}).usage),
-    temp: num(cpuTemp.value),
     download: num((data.network_speed || {}).download_mbps),
     upload: num((data.network_speed || {}).upload_mbps),
     uptime: (data.system_info || {}).uptime || null,
@@ -292,7 +289,7 @@ function statusTool() {
     name: 'hardware_monitor_status',
     description: [
       '读取本机 Hardware Monitor 的实时快照：CPU 占用、内存占用、NVIDIA GPU 占用、',
-      'CPU/GPU 温度、网络上下行速率、开机时长与平台。',
+      '网络上下行速率、开机时长与平台。',
       '服务未运行或未配置 token 时返回 ok=false（附原因），不要编造数据。',
     ].join(''),
     parameters: { type: 'object', additionalProperties: false, properties: {} },
@@ -323,7 +320,7 @@ function statusTool() {
         }
         const s = summarize(result.data)
         const text = [
-          `CPU ${fmt(s.cpu)}% · MEM ${fmt(s.mem)}% · GPU ${fmt(s.gpu)}% · ${fmt(s.temp, 1)}°C`,
+          `CPU ${fmt(s.cpu)}% · MEM ${fmt(s.mem)}% · GPU ${fmt(s.gpu)}%`,
           `网络 ↓ ${fmt(s.download, 1)} MB/s ↑ ${fmt(s.upload, 1)} MB/s · 开机 ${s.uptime || '--'} · 平台 ${s.platform || '--'}`,
         ].join('\n')
         return { ok: true, ...s, service: SERVICE, text, snapshot: result.data }

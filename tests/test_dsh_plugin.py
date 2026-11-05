@@ -131,7 +131,6 @@ def test_dsh_host_plugin_routes_and_tool(fake_monitor):
     assert tool["cpu"] == 21.0
     assert tool["mem"] == 50.0
     assert tool["gpu"] == 7
-    assert tool["temp"] == 47.5
     assert "CPU 21% · MEM 50%" in tool["text"]
 
     summary = probe["summary"]

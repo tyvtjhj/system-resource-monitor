@@ -196,10 +196,6 @@ def create_app():
     def api_network_speed():
         return _metric("network_speed")
 
-    @app.route("/api/temperature")
-    def api_temperature():
-        return _metric("temperature")
-
     @app.route("/api/gpu")
     def api_gpu():
         return _metric("gpu")
